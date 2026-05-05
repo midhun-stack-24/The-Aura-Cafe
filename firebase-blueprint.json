@@ -1,0 +1,140 @@
+{
+  "entities": {
+    "Table": {
+      "title": "Table",
+      "description": "Represents a dining table in the cafe.",
+      "type": "object",
+      "properties": {
+        "number": { "type": "string" },
+        "status": { "type": "string", "enum": ["available", "occupied"] },
+        "qrUrl": { "type": "string" }
+      },
+      "required": ["number", "status"]
+    },
+    "MenuCategory": {
+      "title": "Menu Category",
+      "description": "Categories for menu items (e.g., Hot Coffee, Cakes).",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "sortOrder": { "type": "number" }
+      },
+      "required": ["name", "sortOrder"]
+    },
+    "MenuItem": {
+      "title": "Menu Item",
+      "description": "A food or drink item on the menu.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "price": { "type": "number" },
+        "description": { "type": "string" },
+        "image": { "type": "string" },
+        "available": { "type": "boolean" },
+        "variants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "price": { "type": "number" }
+            }
+          }
+        },
+        "addOns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "price": { "type": "number" }
+            }
+          }
+        }
+      },
+      "required": ["name", "categoryId", "price", "available"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "An order placed by a customer or admin.",
+      "type": "object",
+      "properties": {
+        "tableNumber": { "type": "string" },
+        "customerName": { "type": "string" },
+        "status": { "type": "string", "enum": ["received", "preparing", "ready", "served", "cancelled"] },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "quantity": { "type": "number" },
+              "price": { "type": "number" },
+              "variant": { "type": "string" },
+              "addOns": { "type": "array", "items": { "type": "string" } },
+              "note": { "type": "string" }
+            }
+          }
+        },
+        "total": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "printedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tableNumber", "status", "items", "total", "createdAt"]
+    },
+    "Bill": {
+      "title": "Bill",
+      "description": "A finalized bill for an order.",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string" },
+        "tableNumber": { "type": "string" },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "tax": { "type": "number" },
+        "total": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["cash", "upi", "card"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tableNumber", "items", "subtotal", "tax", "total", "paymentMethod", "createdAt"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Admin users for the system.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "superadmin"] }
+      },
+      "required": ["email", "role"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "General system settings.",
+      "type": "object",
+      "properties": {
+        "printer": {
+          "type": "object",
+          "properties": {
+            "ip": { "type": "string" },
+            "port": { "type": "number" },
+            "paperWidth": { "type": "number" }
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/tables/{tableId}": { "schema": "Table", "description": "Tables in the cafe" },
+    "/menuCategories/{catId}": { "schema": "MenuCategory", "description": "Menu categories" },
+    "/menuItems/{itemId}": { "schema": "MenuItem", "description": "Menu items" },
+    "/orders/{orderId}": { "schema": "Order", "description": "Customer orders" },
+    "/bills/{billId}": { "schema": "Bill", "description": "Final bills" },
+    "/admins/{uid}": { "schema": "Admin", "description": "Admin user data" },
+    "/settings/config": { "schema": "Settings", "description": "System settings" }
+  }
+}

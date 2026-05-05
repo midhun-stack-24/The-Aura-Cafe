@@ -1,0 +1,59 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Playfair Display", serif;
+
+  --color-cafe-espresso: #3B1F0E;
+  --color-cafe-caramel: #C47F3B;
+  --color-cafe-cream: #FAF5EE;
+  --color-cafe-gold: #E8B86D;
+  --color-aura-green: #004225;
+  --color-aura-gold: #D4AF37;
+  --color-aura-cream: #FAF9F6;
+  
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+}
+
+@layer base {
+  body {
+    @apply bg-aura-cream text-cafe-espresso font-sans;
+  }
+}
+
+.luxury-card {
+  @apply bg-white rounded-[2rem] shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-aura-gold/10 overflow-hidden hover:border-aura-gold/20 transition-all;
+}
+
+.gold-accent {
+  @apply text-aura-gold font-black uppercase tracking-widest;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #thermal-receipt, #thermal-receipt * {
+    visibility: visible;
+  }
+  #thermal-receipt {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 72mm;
+    padding: 0;
+    margin: 0;
+    visibility: visible !important;
+  }
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+  nav, footer, header, .no-print {
+    display: none !important;
+  }
+}
+

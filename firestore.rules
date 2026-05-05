@@ -1,0 +1,60 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helpers
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { 
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); 
+    }
+    function isValidId(id) { return id is string && id.size() <= 128; }
+
+    // Tables
+    match /tables/{tableId} {
+      allow read: if true; // Public can see table info for menu
+      allow write: if isAdmin();
+    }
+
+    // Menu
+    match /menuCategories/{catId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /menuItems/{itemId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Orders
+    match /orders/{orderId} {
+      // Customers can create orders and read their own (if they have the orderId)
+      // For simplicity in a cafe setting without account creation for customers:
+      allow create: if true; 
+      allow read: if true; // In production, we'd restrict this more, but for a cafe guest checkout it's common
+      allow update, delete: if isAdmin();
+    }
+
+    // Bills
+    match /bills/{billId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Admin Profiles
+    match /admins/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Settings
+    match /settings/config {
+      allow read: if true; // Public might need some settings (like currency)
+      allow write: if isAdmin();
+    }
+  }
+}
