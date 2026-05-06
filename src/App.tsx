@@ -15,6 +15,7 @@ import AdminLogin from './components/admin/AdminLogin.tsx';
 import AdminSetup from './components/admin/AdminSetup.tsx';
 import OrderStatus from './components/menu/OrderStatus.tsx';
 import { motion, AnimatePresence } from 'motion/react';
+import { Analytics } from '@vercel/analytics/react';
 
 export default function App() {
   const [user, setUser] = React.useState<any>(null);
@@ -67,6 +68,7 @@ export default function App() {
           <Route path="/admin/*" element={user ? <AdminDashboard /> : <Navigate to="/admin/login" replace />} />
         </Routes>
       </AnimatePresence>
+      <Analytics />
     </Router>
   );
 }
