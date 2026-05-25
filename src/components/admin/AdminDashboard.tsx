@@ -90,7 +90,7 @@ export default function AdminDashboard() {
     return localStorage.getItem('admin_printer_font_size') || '11px';
   });
   const [preferredPrinter, setPreferredPrinter] = React.useState<string>(() => {
-    return localStorage.getItem('admin_printer_name') || 'TVS Wireless Thermal Printer';
+    return localStorage.getItem('admin_printer_name') || 'TVS RP-3150 Gold (Wired USB)';
   });
 
   React.useEffect(() => {
@@ -1589,6 +1589,72 @@ function AdminSettings({
   preferredPrinter: string,
   setPreferredPrinter: (v: string) => void
 }) {
+  const WIRED_PRINTERS_PRESETS = [
+    'TVS RP-3150 Gold (Wired USB)',
+    'TVS RP-3200 Star (Wired USB)',
+    'Epson TM-T82X (Wired USB)',
+    'POS-80 series (Generic Wired USB)',
+    'POS-58 series (Generic Wired USB)'
+  ];
+
+  const [selectedPreset, setSelectedPreset] = React.useState<string>(() => {
+    if (WIRED_PRINTERS_PRESETS.includes(preferredPrinter)) {
+      return preferredPrinter;
+    }
+    return 'Custom';
+  });
+
+  const [customName, setCustomName] = React.useState<string>(() => {
+    return WIRED_PRINTERS_PRESETS.includes(preferredPrinter) ? '' : preferredPrinter;
+  });
+
+  const [usbDeviceName, setUsbDeviceName] = React.useState<string | null>(() => {
+    return localStorage.getItem('paired_usb_device_name');
+  });
+
+  const [usbError, setUsbError] = React.useState<string | null>(null);
+
+  const handlePairUSB = async () => {
+    setUsbError(null);
+    try {
+      const nav = navigator as any;
+      if (!nav.usb) {
+        setUsbError("WebUSB is not supported in this browser. Try opening the dashboard in a new tab (click ↗ icon on the top right) to grant physical USB permissions.");
+        return;
+      }
+      const device = await nav.usb.requestDevice({ filters: [] });
+      const name = device.productName || `USB Device (${device.vendorId.toString(16).padStart(4, '0')}:${device.productId.toString(16).padStart(4, '0')})`;
+      setUsbDeviceName(name);
+      localStorage.setItem('paired_usb_device_name', name);
+      setPreferredPrinter(name);
+      setSelectedPreset('Custom');
+      setCustomName(name);
+    } catch (err: any) {
+      console.error(err);
+      if (err.name === 'NotFoundError') {
+        setUsbError("Wired hardware search cancelled. No device was selected in the browser popup.");
+      } else if (err.name === 'SecurityError') {
+        setUsbError("Security permission blocked in iframe. Please open the dashboard in a separate tab (click the ↗ icon at the top right of your screen) to pair USB devices!");
+      } else {
+        setUsbError(err.message || "Failed to scan for USB devices. Please check local cable connection.");
+      }
+    }
+  };
+
+  const handlePresetChange = (val: string) => {
+    setSelectedPreset(val);
+    if (val !== 'Custom') {
+      setPreferredPrinter(val);
+    } else {
+      setPreferredPrinter(customName || 'TVS Wired Printer');
+    }
+  };
+
+  const handleCustomNameChange = (val: string) => {
+    setCustomName(val);
+    setPreferredPrinter(val);
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
       <header className="space-y-2">
@@ -1643,26 +1709,89 @@ function AdminSettings({
             </div>
             <div>
               <h3 className="font-bold text-cafe-espresso">Printer Settings</h3>
-              <p className="text-[10px] text-cafe-caramel uppercase font-black tracking-widest">Device Specifics</p>
+              <p className="text-[10px] text-cafe-caramel uppercase font-black tracking-widest">Wired Device Configuration</p>
             </div>
           </div>
 
           <div className="space-y-4 pt-4 border-t border-cafe-cream">
-            {/* Preferred Printer Name */}
+            {/* Preferred Printer Selector Dropdown */}
             <div className="space-y-2">
               <label className="block text-xs font-black uppercase text-cafe-caramel tracking-widest">
-                Preferred Thermal Printer
+                Select Your Connect Printer
               </label>
-              <input
-                type="text"
-                value={preferredPrinter}
-                onChange={(e) => setPreferredPrinter(e.target.value)}
-                placeholder="e.g. TVS Thermal Printer"
-                className="w-full px-4 py-3 rounded-xl border border-cafe-cream text-cafe-espresso text-sm font-bold focus:outline-none focus:ring-2 focus:ring-aura-gold focus:border-transparent transition-all"
-              />
-              <p className="text-[10px] text-cafe-caramel leading-relaxed">
-                Tip: Set this name as a local reminder. Make sure this matches the printer chosen under the <b>Destination</b> list in the Chrome print dialog.
-              </p>
+              
+              <select
+                value={selectedPreset}
+                onChange={(e) => handlePresetChange(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-cafe-cream bg-white text-cafe-espresso text-sm font-bold focus:outline-none focus:ring-2 focus:ring-aura-gold focus:border-transparent transition-all"
+              >
+                {WIRED_PRINTERS_PRESETS.map((preset) => (
+                  <option key={preset} value={preset}>
+                    {preset}
+                  </option>
+                ))}
+                <option value="Custom">Custom / Pair Other USB Printer...</option>
+              </select>
+
+              {/* Show text input ONLY if Custom is chosen */}
+              {selectedPreset === 'Custom' && (
+                <div className="mt-3 space-y-2">
+                  <span className="block text-[10px] font-black uppercase text-cafe-caramel tracking-wider">
+                    Enter Custom Device Name
+                  </span>
+                  <input
+                    type="text"
+                    value={customName}
+                    onChange={(e) => handleCustomNameChange(e.target.value)}
+                    placeholder="e.g. TVS Wired Receipt Printer"
+                    className="w-full px-4 py-3 rounded-xl border border-cafe-cream text-cafe-espresso text-sm font-bold focus:outline-none focus:ring-2 focus:ring-aura-gold focus:border-transparent transition-all"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Hardware-level WebUSB Scanner Option */}
+            <div className="p-4 bg-cafe-cream/20 rounded-2xl border border-cafe-cream space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="block text-[10px] font-black uppercase text-cafe-caramel tracking-widest">
+                    Direct USB Hardware Sync
+                  </span>
+                  <p className="text-[10px] text-cafe-espresso/70 mt-0.5">
+                    Scan and connect the physical TVS printer directly.
+                  </p>
+                </div>
+                {usbDeviceName ? (
+                  <span className="inline-flex items-center px-2 py-1 rounded bg-green-100 text-green-800 text-[9px] font-bold">
+                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1 animate-pulse" />
+                    Paired
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-1 rounded bg-gray-100 text-gray-400 text-[9px] font-bold">
+                    Not Paired
+                  </span>
+                )}
+              </div>
+
+              {usbDeviceName && (
+                <p className="text-[11px] font-mono font-bold text-aura-green bg-white p-2 rounded-lg border border-cafe-cream/40">
+                  🔌 USB: {usbDeviceName}
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={handlePairUSB}
+                className="w-full py-2.5 px-4 bg-cafe-espresso text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-cafe-espresso/90 active:scale-95 transition-all text-center"
+              >
+                🔍 Scan & Pair Wired USB Printer
+              </button>
+
+              {usbError && (
+                <p className="text-[10px] text-red-600 font-bold leading-normal mt-2">
+                  ⚠️ {usbError}
+                </p>
+              )}
             </div>
 
             {/* Paper Size Sizer */}
