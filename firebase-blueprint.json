@@ -126,6 +126,19 @@
           }
         }
       }
+    },
+    "PrintJob": {
+      "title": "Print Job",
+      "description": "A job queued for a thermal printer.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["KOT", "BILL"] },
+        "orderId": { "type": "string" },
+        "data": { "type": "object" },
+        "status": { "type": "string", "enum": ["pending", "printing", "completed", "failed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -135,6 +148,7 @@
     "/orders/{orderId}": { "schema": "Order", "description": "Customer orders" },
     "/bills/{billId}": { "schema": "Bill", "description": "Final bills" },
     "/admins/{uid}": { "schema": "Admin", "description": "Admin user data" },
-    "/settings/config": { "schema": "Settings", "description": "System settings" }
+    "/settings/config": { "schema": "Settings", "description": "System settings" },
+    "/print_queue/{jobId}": { "schema": "PrintJob", "description": "Thermal printer queue" }
   }
 }

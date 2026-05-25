@@ -32,28 +32,22 @@
 }
 
 @media print {
-  body * {
-    visibility: hidden;
+  /* Hide the React application root completely to avoid layout height and multi-page blank feeds */
+  #root {
+    display: none !important;
   }
-  #thermal-receipt, #thermal-receipt * {
-    visibility: visible;
-  }
+  /* Thermal receipt styling for 80mm rolls */
   #thermal-receipt {
-    position: absolute;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 72mm;
-    padding: 0;
-    margin: 0;
-    visibility: visible !important;
+    display: block !important;
+    width: 74mm !important; /* Fits standard 80mm / 3 inch printer printable bounds perfectly */
+    margin: 0 !important;
+    padding: 2mm 4mm !important;
+    box-sizing: border-box !important;
+    font-family: monospace !important;
   }
   @page {
-    size: 80mm auto;
-    margin: 0;
-  }
-  nav, footer, header, .no-print {
-    display: none !important;
+    size: 80mm auto; /* High driver compatibility for thermal rolls */
+    margin: 0 !important;
   }
 }
 

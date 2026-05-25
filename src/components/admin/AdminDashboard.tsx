@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { 
   collection, 
   query, 
@@ -51,6 +52,29 @@ import {
 import { auth } from '../../lib/firebase.ts';
 import { signOut } from 'firebase/auth';
 
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 export default function AdminDashboard() {
   const [orders, setOrders] = React.useState<Order[]>([]);
   const [activeTab, setActiveTab] = React.useState<'orders' | 'menu' | 'billing' | 'reports' | 'tables' | 'kitchen' | 'settings'>('orders');
@@ -61,8 +85,20 @@ export default function AdminDashboard() {
   const [autoPrintEnabled, setAutoPrintEnabled] = React.useState(true);
   const [soundEnabled, setSoundEnabled] = React.useState(true);
 
+  // Sync state values to mutable refs so the subscription callback always reads the latest values
+  const autoPrintEnabledRef = React.useRef(autoPrintEnabled);
+  const soundEnabledRef = React.useRef(soundEnabled);
+
+  React.useEffect(() => {
+    autoPrintEnabledRef.current = autoPrintEnabled;
+  }, [autoPrintEnabled]);
+
+  React.useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
+
   const playNotification = () => {
-    if (!soundEnabled) return;
+    if (!soundEnabledRef.current) return;
     try {
       const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
       audio.volume = 0.5;
@@ -101,6 +137,8 @@ export default function AdminDashboard() {
 
   React.useEffect(() => {
     const q = query(collection(db, 'orders'));
+    let isInitial = true;
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
        const sorted = snapshot.docs
          .map(d => ({ id: d.id, ...d.data() } as Order))
@@ -110,31 +148,44 @@ export default function AdminDashboard() {
             return db_.getTime() - da.getTime();
          });
        
-      // Auto-print logic for new received orders
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === 'added') {
-          const orderData = { id: change.doc.id, ...change.doc.data() } as Order;
-          if (orderData.status === OrderStatus.RECEIVED) {
-            playNotification();
-            // Check if already printed to avoid duplicates
-            if (autoPrintEnabled && !autoPrintRef.current.includes(change.doc.id)) {
-              autoPrintRef.current.push(change.doc.id);
-              triggerPrint(orderData, 'KOT');
+      // Auto-print logic for new received orders (skipped on initial load)
+      if (!isInitial) {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const orderData = { id: change.doc.id, ...change.doc.data() } as Order;
+            if (orderData.status === OrderStatus.RECEIVED) {
+              playNotification();
+              // Check if already printed to avoid duplicates
+              if (!autoPrintRef.current.includes(change.doc.id)) {
+                autoPrintRef.current.push(change.doc.id);
+                if (autoPrintEnabledRef.current) {
+                  triggerPrint(orderData, 'KOT');
+                }
+              }
+
+              // 1. Push to Cloud Print Queue (For Local Thermal Printer Bridge)
+              addDoc(collection(db, 'print_queue'), {
+                type: 'KOT',
+                data: orderData,
+                status: 'pending',
+                createdAt: serverTimestamp()
+              }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'print_queue'));
+
+              // 2. Browser alert
+              console.log('🔔 New Order Received!');
             }
-
-            // 1. Push to Cloud Print Queue (For Local Thermal Printer Bridge)
-            addDoc(collection(db, 'print_queue'), {
-              type: 'KOT',
-              data: orderData,
-              status: 'pending',
-              createdAt: serverTimestamp()
-            }).catch(e => console.error("Queue failed:", e));
-
-            // 2. Browser alert
-            console.log('🔔 New Order Received!');
           }
-        }
-      });
+        });
+      } else {
+        // Collect existing RECEIVED orders on start so future updates doesn't double print
+        snapshot.docs.forEach((doc) => {
+          const o = doc.data() as Order;
+          if (o.status === OrderStatus.RECEIVED) {
+            autoPrintRef.current.push(doc.id);
+          }
+        });
+        isInitial = false;
+      }
 
       setOrders(sorted);
     }, (error) => {
@@ -325,13 +376,14 @@ export default function AdminDashboard() {
               setAutoPrint={setAutoPrintEnabled}
               sound={soundEnabled}
               setSound={setSoundEnabled}
+              onTestPrint={(data) => triggerPrint(data, 'KOT')}
             />
           </div>
         )}
 
         {/* Hidden Thermal Receipt for Printing (80mm) */}
-        {printData && (
-          <div id="thermal-receipt" className="hidden print:block font-mono text-[11px] leading-tight text-left text-black bg-white">
+        {printData && createPortal(
+          <div id="thermal-receipt" className="font-mono text-[11px] leading-tight text-left text-black bg-white">
             <div className="border-b border-dashed border-black pb-4 mb-4 text-left">
               <h2 className="text-lg font-black uppercase tracking-tighter">THE AURA CAFE</h2>
               <p className="text-[10px]">123 Coffee Lane, Brew City</p>
@@ -385,7 +437,8 @@ export default function AdminDashboard() {
                <p className="font-bold underline mb-1 uppercase tracking-widest">{printData.type === 'BILL' ? 'THANK YOU! VISIT AGAIN' : 'PROCEED TO COOKING'}</p>
                <p className="text-[9px] opacity-60">Generated via Aura Cafe POS Cloud</p>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
         </main>
       </div>
@@ -1526,12 +1579,14 @@ function AdminSettings({
   autoPrint, 
   setAutoPrint, 
   sound, 
-  setSound 
+  setSound,
+  onTestPrint
 }: { 
   autoPrint: boolean, 
   setAutoPrint: (v: boolean) => void,
   sound: boolean,
-  setSound: (v: boolean) => void
+  setSound: (v: boolean) => void,
+  onTestPrint: (data: any) => void
 }) {
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
@@ -1625,20 +1680,39 @@ function AdminSettings({
           <ul className="space-y-4">
             <li className="flex items-start space-x-4">
               <div className="w-6 h-6 bg-aura-gold text-aura-green rounded-full flex items-center justify-center font-black text-xs shrink-0 mt-1">1</div>
-              <p className="text-sm text-white/80">Connect your Thermal Printer to your kitchen PC via USB or Network.</p>
+              <div className="space-y-1">
+                <p className="text-sm text-white/80">Connect your WiFi Printer to the same network as this machine.</p>
+                <div className="bg-white/5 p-3 rounded-xl border border-white/10">
+                  <p className="text-[10px] text-white/40 uppercase font-black mb-2">Pro Tip: Kiosk Mode</p>
+                  <p className="text-[11px] text-white/60 leading-relaxed">
+                    To print <b>instantly</b> without the "Print Dialog" popup, launch Chrome with the <code>--kiosk-printing</code> flag. This enables "Silent Printing".
+                  </p>
+                </div>
+              </div>
             </li>
             <li className="flex items-start space-x-4">
               <div className="w-6 h-6 bg-aura-gold text-aura-green rounded-full flex items-center justify-center font-black text-xs shrink-0 mt-1">2</div>
-              <p className="text-sm text-white/80">Install the <b>Thermal Bridge Script</b> on that local PC. It listens to your Firebase <code>print_queue</code> collection.</p>
-            </li>
-            <li className="flex items-start space-x-4">
-              <div className="w-6 h-6 bg-aura-gold text-aura-green rounded-full flex items-center justify-center font-black text-xs shrink-0 mt-1">3</div>
-              <p className="text-sm text-white/80">When a new order arrives, the Cloud Queue notifies your Bridge, which sends raw ESC/POS data directly to your printer instantly.</p>
+              <p className="text-sm text-white/80">Set your Kitchen Printer as the "Default Printer" in your computer settings.</p>
             </li>
           </ul>
-          <div className="pt-4">
-            <button className="bg-white text-cafe-espresso px-8 py-4 rounded-xl font-bold uppercase tracking-widest text-[10px] hover:bg-aura-gold hover:text-aura-green transition-all shadow-xl">
-              Get Bridge Script (v1.0.4)
+          <div className="pt-4 flex flex-wrap gap-4">
+            <button 
+              onClick={() => {
+                const testData = {
+                  type: 'KOT',
+                  tableNumber: 'TEST',
+                  items: [{ name: 'Printer Test Page', quantity: 1, price: 0 }],
+                  total: 0,
+                  id: 'TEST-' + Math.random().toString(36).substring(7).toUpperCase()
+                };
+                onTestPrint(testData);
+              }}
+              className="bg-aura-gold text-aura-green px-8 py-4 rounded-xl font-bold uppercase tracking-widest text-[10px] hover:bg-white hover:text-cafe-espresso transition-all shadow-xl"
+            >
+              Print Test Ticket
+            </button>
+            <button className="bg-white/10 text-white border border-white/20 px-8 py-4 rounded-xl font-bold uppercase tracking-widest text-[10px] hover:bg-white/20 transition-all">
+              Download Bridge Script
             </button>
           </div>
         </div>
