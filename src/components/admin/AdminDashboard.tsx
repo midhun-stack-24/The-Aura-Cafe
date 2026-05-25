@@ -85,6 +85,28 @@ export default function AdminDashboard() {
   const [autoPrintEnabled, setAutoPrintEnabled] = React.useState(true);
   const [soundEnabled, setSoundEnabled] = React.useState(true);
 
+  const [paperSize, setPaperSize] = React.useState<'80mm' | '58mm'>(() => {
+    return (localStorage.getItem('admin_printer_paper') as '80mm' | '58mm') || '80mm';
+  });
+  const [printerFontSize, setPrinterFontSize] = React.useState<string>(() => {
+    return localStorage.getItem('admin_printer_font_size') || '11px';
+  });
+  const [preferredPrinter, setPreferredPrinter] = React.useState<string>(() => {
+    return localStorage.getItem('admin_printer_name') || 'TVS Wireless Thermal Printer';
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem('admin_printer_paper', paperSize);
+  }, [paperSize]);
+
+  React.useEffect(() => {
+    localStorage.setItem('admin_printer_font_size', printerFontSize);
+  }, [printerFontSize]);
+
+  React.useEffect(() => {
+    localStorage.setItem('admin_printer_name', preferredPrinter);
+  }, [preferredPrinter]);
+
   // Sync state values to mutable refs so the subscription callback always reads the latest values
   const autoPrintEnabledRef = React.useRef(autoPrintEnabled);
   const soundEnabledRef = React.useRef(soundEnabled);
@@ -377,13 +399,23 @@ export default function AdminDashboard() {
               sound={soundEnabled}
               setSound={setSoundEnabled}
               onTestPrint={(data) => triggerPrint(data, 'KOT')}
+              paperSize={paperSize}
+              setPaperSize={setPaperSize}
+              printerFontSize={printerFontSize}
+              setPrinterFontSize={setPrinterFontSize}
+              preferredPrinter={preferredPrinter}
+              setPreferredPrinter={setPreferredPrinter}
             />
           </div>
         )}
 
-        {/* Hidden Thermal Receipt for Printing (80mm) */}
+        {/* Hidden Thermal Receipt for Printing (Configurable width and size) */}
         {printData && createPortal(
-          <div id="thermal-receipt" className="font-mono text-[11px] leading-tight text-left text-black bg-white">
+          <div 
+            id="thermal-receipt" 
+            className={`font-mono leading-tight text-left text-black bg-white size-${paperSize}`}
+            style={{ fontSize: printerFontSize }}
+          >
             <div className="border-b border-dashed border-black pb-4 mb-4 text-left">
               <h2 className="text-lg font-black uppercase tracking-tighter">THE AURA CAFE</h2>
               <p className="text-[10px]">123 Coffee Lane, Brew City</p>
@@ -1580,19 +1612,31 @@ function AdminSettings({
   setAutoPrint, 
   sound, 
   setSound,
-  onTestPrint
+  onTestPrint,
+  paperSize,
+  setPaperSize,
+  printerFontSize,
+  setPrinterFontSize,
+  preferredPrinter,
+  setPreferredPrinter
 }: { 
   autoPrint: boolean, 
   setAutoPrint: (v: boolean) => void,
   sound: boolean,
   setSound: (v: boolean) => void,
-  onTestPrint: (data: any) => void
+  onTestPrint: (data: any) => void,
+  paperSize: '80mm' | '58mm',
+  setPaperSize: (v: '80mm' | '58mm') => void,
+  printerFontSize: string,
+  setPrinterFontSize: (v: string) => void,
+  preferredPrinter: string,
+  setPreferredPrinter: (v: string) => void
 }) {
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
       <header className="space-y-2">
         <h2 className="text-3xl font-display font-black text-cafe-espresso">Terminal Settings</h2>
-        <p className="text-aura-green/60 font-medium">Configure kitchen automation and hardware integrations.</p>
+        <p className="text-aura-green/60 font-medium">Configure network/USB kitchen printers and automation preferences.</p>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1637,27 +1681,83 @@ function AdminSettings({
           </div>
         </div>
 
-        {/* Hardware Card */}
+        {/* Hardware & Printer Config Card */}
         <div className="bg-white p-8 rounded-[2rem] border border-cafe-cream shadow-sm hover:shadow-md transition-all space-y-6">
           <div className="flex items-center space-x-4">
             <div className="w-12 h-12 bg-aura-green/10 text-aura-green rounded-2xl flex items-center justify-center">
               <Printer size={24} />
             </div>
             <div>
-              <h3 className="font-bold text-cafe-espresso">Thermal Printing</h3>
-              <p className="text-[10px] text-cafe-caramel uppercase font-black tracking-widest">Hardware Bridge</p>
+              <h3 className="font-bold text-cafe-espresso">Printer Settings</h3>
+              <p className="text-[10px] text-cafe-caramel uppercase font-black tracking-widest">Device Specifics</p>
             </div>
           </div>
 
           <div className="space-y-4 pt-4 border-t border-cafe-cream">
-            <div className="p-4 bg-aura-green/5 rounded-2xl border border-aura-green/10">
-              <div className="flex items-center space-x-2 text-aura-green mb-2">
-                <Monitor size={14} className="animate-pulse" />
-                <span className="text-[10px] font-black uppercase tracking-widest">Bridge Active</span>
-              </div>
-              <p className="text-xs font-medium text-aura-green/80 leading-relaxed">
-                Cloud Print Queue is active. Orders are being mirrored to <code>print_queue</code> for local hardware listeners.
+            {/* Preferred Printer Name */}
+            <div className="space-y-2">
+              <label className="block text-xs font-black uppercase text-cafe-caramel tracking-widest">
+                Preferred Thermal Printer
+              </label>
+              <input
+                type="text"
+                value={preferredPrinter}
+                onChange={(e) => setPreferredPrinter(e.target.value)}
+                placeholder="e.g. TVS Thermal Printer"
+                className="w-full px-4 py-3 rounded-xl border border-cafe-cream text-cafe-espresso text-sm font-bold focus:outline-none focus:ring-2 focus:ring-aura-gold focus:border-transparent transition-all"
+              />
+              <p className="text-[10px] text-cafe-caramel leading-relaxed">
+                Tip: Set this name as a local reminder. Make sure this matches the printer chosen under the <b>Destination</b> list in the Chrome print dialog.
               </p>
+            </div>
+
+            {/* Paper Size Sizer */}
+            <div className="space-y-2 pt-2">
+              <span className="block text-xs font-black uppercase text-cafe-caramel tracking-widest mb-1">
+                Paper Size Width
+              </span>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPaperSize('80mm')}
+                  className={`py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider text-center transition-all ${
+                    paperSize === '80mm'
+                      ? 'bg-cafe-espresso text-white shadow-md'
+                      : 'bg-cafe-cream/30 text-cafe-caramel hover:bg-cafe-cream/50'
+                  }`}
+                >
+                  80mm (Standard 3")
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaperSize('58mm')}
+                  className={`py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider text-center transition-all ${
+                    paperSize === '58mm'
+                      ? 'bg-cafe-espresso text-white shadow-md'
+                      : 'bg-cafe-cream/30 text-cafe-caramel hover:bg-cafe-cream/50'
+                  }`}
+                >
+                  58mm (Compact 2")
+                </button>
+              </div>
+            </div>
+
+            {/* Font size sizer */}
+            <div className="space-y-2 pt-2">
+              <label className="block text-xs font-black uppercase text-cafe-caramel tracking-widest">
+                Print Font Sizing / Density
+              </label>
+              <select
+                value={printerFontSize}
+                onChange={(e) => setPrinterFontSize(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-cafe-cream bg-white text-cafe-espresso text-sm font-bold focus:outline-none focus:ring-2 focus:ring-aura-gold focus:border-transparent transition-all"
+              >
+                <option value="9px">9px (Extra Small / Compact Roll)</option>
+                <option value="10px">10px (Small)</option>
+                <option value="11px">11px (Normal / Default)</option>
+                <option value="12px">12px (Medium)</option>
+                <option value="13px">13px (Large / High Contrast)</option>
+              </select>
             </div>
           </div>
         </div>
@@ -1671,28 +1771,46 @@ function AdminSettings({
         <div className="relative z-10 space-y-6 max-w-2xl">
           <div className="inline-flex items-center space-x-2 bg-aura-gold/20 text-aura-gold px-4 py-2 rounded-full border border-aura-gold/30">
             <Bell size={14} />
-            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Silent Auto-Print Guide</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Silent WiFi Print Setup</span>
           </div>
-          <h3 className="text-3xl font-display font-black">How to print automatically without dialogs?</h3>
-          <p className="text-white/70 leading-relaxed font-medium">
-            Standard browsers (Chrome/Safari) always show a print dialog for security. For a professional kitchen setup with "Silent Print" (No dialogs):
+          <h3 className="text-3xl font-display font-black">How to select your TVS/WiFi Printer here?</h3>
+          <p className="text-white/70 leading-relaxed font-semibold">
+            Since standard browsers cannot communicate directly with local WiFi/network hardware ports due to security, you route them perfectly via standard system print properties:
           </p>
-          <ul className="space-y-4">
+          <ul className="space-y-5">
             <li className="flex items-start space-x-4">
               <div className="w-6 h-6 bg-aura-gold text-aura-green rounded-full flex items-center justify-center font-black text-xs shrink-0 mt-1">1</div>
               <div className="space-y-1">
-                <p className="text-sm text-white/80">Connect your WiFi Printer to the same network as this machine.</p>
-                <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                  <p className="text-[10px] text-white/40 uppercase font-black mb-2">Pro Tip: Kiosk Mode</p>
-                  <p className="text-[11px] text-white/60 leading-relaxed">
-                    To print <b>instantly</b> without the "Print Dialog" popup, launch Chrome with the <code>--kiosk-printing</code> flag. This enables "Silent Printing".
-                  </p>
-                </div>
+                <p className="text-sm font-bold text-white">Add/Install the Printer in Windows or MacOS</p>
+                <p className="text-xs text-white/60 leading-relaxed">
+                  Go to your Billing Machine's settings (<b>Printers & Scanners</b>), click <b>Add Printer</b>, choose your TVS / network address, and configure it normally.
+                </p>
               </div>
             </li>
             <li className="flex items-start space-x-4">
               <div className="w-6 h-6 bg-aura-gold text-aura-green rounded-full flex items-center justify-center font-black text-xs shrink-0 mt-1">2</div>
-              <p className="text-sm text-white/80">Set your Kitchen Printer as the "Default Printer" in your computer settings.</p>
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-white">Select in Chrome printed Destinations</p>
+                <p className="text-xs text-white/60 leading-relaxed">
+                  Click the <b>Print Test Ticket</b> button below. When the print preview dialog opens, click the <b>Destination</b> dropdown and select your TVS / WiFi printer.
+                </p>
+              </div>
+            </li>
+            <li className="flex items-start space-x-4">
+              <div className="w-6 h-6 bg-aura-gold text-aura-green rounded-full flex items-center justify-center font-black text-xs shrink-0 mt-1">3</div>
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-white">Setup Automatic "Silent Mode" (Recommended)</p>
+                <p className="text-xs text-white/50 leading-relaxed">
+                  To bypass the popup preview altogether and print <b>automatically with no clicks</b>:
+                </p>
+                <div className="bg-white/5 p-3 rounded-xl border border-white/10 mt-2">
+                  <p className="text-[10px] text-white font-black mb-1">PRO-TIP: CHROME SILENT MODE</p>
+                  <p className="text-[11px] text-white/70 leading-relaxed">
+                    Set your TVS printer as the system's "Default Printer", close Chrome completely, then re-launch it with the command option: <code>--kiosk-printing</code>. 
+                    From then on, clicking "Print" sends tickets directly to physical paper instantly with zero popups!
+                  </p>
+                </div>
+              </div>
             </li>
           </ul>
           <div className="pt-4 flex flex-wrap gap-4">
@@ -1701,7 +1819,7 @@ function AdminSettings({
                 const testData = {
                   type: 'KOT',
                   tableNumber: 'TEST',
-                  items: [{ name: 'Printer Test Page', quantity: 1, price: 0 }],
+                  items: [{ name: 'Test - Smiley Fries', quantity: 1, price: 0 }, { name: 'Test - Filter Coffee', quantity: 2, price: 0 }],
                   total: 0,
                   id: 'TEST-' + Math.random().toString(36).substring(7).toUpperCase()
                 };
@@ -1710,9 +1828,6 @@ function AdminSettings({
               className="bg-aura-gold text-aura-green px-8 py-4 rounded-xl font-bold uppercase tracking-widest text-[10px] hover:bg-white hover:text-cafe-espresso transition-all shadow-xl"
             >
               Print Test Ticket
-            </button>
-            <button className="bg-white/10 text-white border border-white/20 px-8 py-4 rounded-xl font-bold uppercase tracking-widest text-[10px] hover:bg-white/20 transition-all">
-              Download Bridge Script
             </button>
           </div>
         </div>

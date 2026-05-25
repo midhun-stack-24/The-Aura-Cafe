@@ -36,17 +36,23 @@
   #root {
     display: none !important;
   }
-  /* Thermal receipt styling for 80mm rolls */
+  /* Thermal receipt styling for 80mm and 58mm rolls */
   #thermal-receipt {
     display: block !important;
-    width: 74mm !important; /* Fits standard 80mm / 3 inch printer printable bounds perfectly */
     margin: 0 !important;
-    padding: 2mm 4mm !important;
+    padding: 2mm 3mm !important;
     box-sizing: border-box !important;
     font-family: monospace !important;
+    background: white !important;
+    color: black !important;
+  }
+  #thermal-receipt.size-80mm {
+    width: 74mm !important;
+  }
+  #thermal-receipt.size-58mm {
+    width: 50mm !important;
   }
   @page {
-    size: 80mm auto; /* High driver compatibility for thermal rolls */
     margin: 0 !important;
   }
 }
