@@ -81,8 +81,6 @@ export default function AdminDashboard() {
   const [printData, setPrintData] = React.useState<any>(null);
   const [isAdminUser, setIsAdminUser] = React.useState<boolean | null>(null);
   const [checkingAdmin, setCheckingAdmin] = React.useState(true);
-  const autoPrintRef = React.useRef<string[]>([]);
-  const [autoPrintEnabled, setAutoPrintEnabled] = React.useState(true);
   const [soundEnabled, setSoundEnabled] = React.useState(true);
 
   const [paperSize, setPaperSize] = React.useState<'80mm' | '58mm'>(() => {
@@ -108,12 +106,7 @@ export default function AdminDashboard() {
   }, [preferredPrinter]);
 
   // Sync state values to mutable refs so the subscription callback always reads the latest values
-  const autoPrintEnabledRef = React.useRef(autoPrintEnabled);
   const soundEnabledRef = React.useRef(soundEnabled);
-
-  React.useEffect(() => {
-    autoPrintEnabledRef.current = autoPrintEnabled;
-  }, [autoPrintEnabled]);
 
   React.useEffect(() => {
     soundEnabledRef.current = soundEnabled;
@@ -170,42 +163,18 @@ export default function AdminDashboard() {
             return db_.getTime() - da.getTime();
          });
        
-      // Auto-print logic for new received orders (skipped on initial load)
+      // Play sound notification on new incoming orders (skipped on initial load)
       if (!isInitial) {
         snapshot.docChanges().forEach((change) => {
           if (change.type === 'added') {
             const orderData = { id: change.doc.id, ...change.doc.data() } as Order;
             if (orderData.status === OrderStatus.RECEIVED) {
               playNotification();
-              // Check if already printed to avoid duplicates
-              if (!autoPrintRef.current.includes(change.doc.id)) {
-                autoPrintRef.current.push(change.doc.id);
-                if (autoPrintEnabledRef.current) {
-                  triggerPrint(orderData, 'KOT');
-                }
-              }
-
-              // 1. Push to Cloud Print Queue (For Local Thermal Printer Bridge)
-              addDoc(collection(db, 'print_queue'), {
-                type: 'KOT',
-                data: orderData,
-                status: 'pending',
-                createdAt: serverTimestamp()
-              }).catch(e => handleFirestoreError(e, OperationType.WRITE, 'print_queue'));
-
-              // 2. Browser alert
-              console.log('🔔 New Order Received!');
+              console.log('🔔 New Order Received (Manual print ready):', orderData.id);
             }
           }
         });
       } else {
-        // Collect existing RECEIVED orders on start so future updates doesn't double print
-        snapshot.docs.forEach((doc) => {
-          const o = doc.data() as Order;
-          if (o.status === OrderStatus.RECEIVED) {
-            autoPrintRef.current.push(doc.id);
-          }
-        });
         isInitial = false;
       }
 
@@ -365,14 +334,8 @@ export default function AdminDashboard() {
                 </button>
               </div>
               <div className="flex items-center space-x-2 border-r border-cafe-cream pr-4">
-                <div 
-                  onClick={() => setAutoPrintEnabled(!autoPrintEnabled)}
-                  className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${autoPrintEnabled ? 'bg-aura-gold' : 'bg-gray-200'}`}
-                  title="Auto Print New Orders"
-                >
-                  <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${autoPrintEnabled ? 'right-0.5' : 'left-0.5'}`} />
-                </div>
-                <span className="text-[9px] font-black uppercase tracking-widest text-cafe-espresso">Auto Print</span>
+                <Printer size={14} className="text-cafe-caramel" />
+                <span className="text-[9px] font-black uppercase tracking-widest text-cafe-espresso">Manual Print Mode</span>
               </div>
               <div className="flex items-center space-x-2">
                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
@@ -384,7 +347,7 @@ export default function AdminDashboard() {
             </button>
           </div>
         </header>
-
+ 
         {activeTab === 'orders' && <OrderFeed orders={orders} onPrint={(data) => triggerPrint(data, 'KOT')} />}
         {activeTab === 'kitchen' && <KitchenKDS orders={orders} onPrint={(data) => triggerPrint(data, 'KOT')} />}
         {activeTab === 'menu' && <MenuManager />}
@@ -394,8 +357,6 @@ export default function AdminDashboard() {
         {activeTab === 'settings' && (
           <div className="flex-1 overflow-y-auto p-4 lg:p-8">
             <AdminSettings 
-              autoPrint={autoPrintEnabled} 
-              setAutoPrint={setAutoPrintEnabled}
               sound={soundEnabled}
               setSound={setSoundEnabled}
               onTestPrint={(data) => triggerPrint(data, 'KOT')}
@@ -1608,8 +1569,6 @@ function OrderFeed({ orders, onPrint }: { orders: Order[], onPrint: (data: any) 
 }
 
 function AdminSettings({ 
-  autoPrint, 
-  setAutoPrint, 
   sound, 
   setSound,
   onTestPrint,
@@ -1620,8 +1579,6 @@ function AdminSettings({
   preferredPrinter,
   setPreferredPrinter
 }: { 
-  autoPrint: boolean, 
-  setAutoPrint: (v: boolean) => void,
   sound: boolean,
   setSound: (v: boolean) => void,
   onTestPrint: (data: any) => void,
@@ -1653,17 +1610,14 @@ function AdminSettings({
           </div>
 
           <div className="space-y-4 pt-4 border-t border-cafe-cream">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="font-bold text-sm text-cafe-espresso">Automatic Printing</p>
-                <p className="text-xs text-cafe-caramel leading-relaxed">Trigger receipt/KOT dialog immediately on new orders.</p>
+            <div className="p-4 bg-aura-gold/5 rounded-2xl border border-aura-gold/10">
+              <div className="flex items-center space-x-2 text-cafe-espresso mb-1">
+                <Printer size={14} className="text-aura-gold" />
+                <span className="text-xs font-black uppercase tracking-widest">Manual Admin Control</span>
               </div>
-              <button 
-                onClick={() => setAutoPrint(!autoPrint)}
-                className={`w-12 h-6 rounded-full relative transition-colors ${autoPrint ? 'bg-aura-gold' : 'bg-gray-200'}`}
-              >
-                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${autoPrint ? 'right-1' : 'left-1'}`} />
-              </button>
+              <p className="text-xs font-medium text-cafe-caramel leading-relaxed">
+                Automatic printing is disabled. Only the Admin/Billing staff can trigger prints by selecting the bill or order card and hitting the print button manually.
+              </p>
             </div>
 
             <div className="flex items-center justify-between">
@@ -1771,43 +1725,43 @@ function AdminSettings({
         <div className="relative z-10 space-y-6 max-w-2xl">
           <div className="inline-flex items-center space-x-2 bg-aura-gold/20 text-aura-gold px-4 py-2 rounded-full border border-aura-gold/30">
             <Bell size={14} />
-            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Silent WiFi Print Setup</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Silent Wired / USB Print Setup</span>
           </div>
-          <h3 className="text-3xl font-display font-black">How to select your TVS/WiFi Printer here?</h3>
+          <h3 className="text-3xl font-display font-black">How to select your TVS Wired Printer here?</h3>
           <p className="text-white/70 leading-relaxed font-semibold">
-            Since standard browsers cannot communicate directly with local WiFi/network hardware ports due to security, you route them perfectly via standard system print properties:
+            Since web browsers cannot communicate directly with local physical USB or Ethernet hardware ports due to browser security sandboxes, your billing machine routes prints perfectly using local system print properties:
           </p>
           <ul className="space-y-5">
             <li className="flex items-start space-x-4">
               <div className="w-6 h-6 bg-aura-gold text-aura-green rounded-full flex items-center justify-center font-black text-xs shrink-0 mt-1">1</div>
               <div className="space-y-1">
-                <p className="text-sm font-bold text-white">Add/Install the Printer in Windows or MacOS</p>
+                <p className="text-sm font-bold text-white">Connect the Cable & Install the Printer Driver</p>
                 <p className="text-xs text-white/60 leading-relaxed">
-                  Go to your Billing Machine's settings (<b>Printers & Scanners</b>), click <b>Add Printer</b>, choose your TVS / network address, and configure it normally.
+                  Plug the USB / Wired LAN cable from your TVS thermal printer directly into your Billing Machine. Go to your computer's settings (<b>Printers & Scanners</b>) to ensure the printer is added, installed with correct drivers, and shows as <b>Online / Ready</b>.
                 </p>
               </div>
             </li>
             <li className="flex items-start space-x-4">
               <div className="w-6 h-6 bg-aura-gold text-aura-green rounded-full flex items-center justify-center font-black text-xs shrink-0 mt-1">2</div>
               <div className="space-y-1">
-                <p className="text-sm font-bold text-white">Select in Chrome printed Destinations</p>
+                <p className="text-sm font-bold text-white">Select TVS Printer under Destinations</p>
                 <p className="text-xs text-white/60 leading-relaxed">
-                  Click the <b>Print Test Ticket</b> button below. When the print preview dialog opens, click the <b>Destination</b> dropdown and select your TVS / WiFi printer.
+                  Click the <b>Print Test Ticket</b> button below. When the browser's print dialog opens, click the <b>Destination</b> option and select your wired TVS Printer from the dropdown list.
                 </p>
               </div>
             </li>
             <li className="flex items-start space-x-4">
               <div className="w-6 h-6 bg-aura-gold text-aura-green rounded-full flex items-center justify-center font-black text-xs shrink-0 mt-1">3</div>
               <div className="space-y-1">
-                <p className="text-sm font-bold text-white">Setup Automatic "Silent Mode" (Recommended)</p>
+                <p className="text-sm font-bold text-white">Activate Automatic "Silent Mode" (Recommended)</p>
                 <p className="text-xs text-white/50 leading-relaxed">
-                  To bypass the popup preview altogether and print <b>automatically with no clicks</b>:
+                  To completely bypass the printer dialogue popup and print <b>automatically on order arrival</b> with no clicks:
                 </p>
                 <div className="bg-white/5 p-3 rounded-xl border border-white/10 mt-2">
                   <p className="text-[10px] text-white font-black mb-1">PRO-TIP: CHROME SILENT MODE</p>
                   <p className="text-[11px] text-white/70 leading-relaxed">
-                    Set your TVS printer as the system's "Default Printer", close Chrome completely, then re-launch it with the command option: <code>--kiosk-printing</code>. 
-                    From then on, clicking "Print" sends tickets directly to physical paper instantly with zero popups!
+                    Set your TVS printer as your computer's "Default Printer", close Chrome completely, then re-launch it with the flag: <code>--kiosk-printing</code>. 
+                    Now, any "Print" action in the billing app will print immediately on your wired roll with zero popups!
                   </p>
                 </div>
               </div>
