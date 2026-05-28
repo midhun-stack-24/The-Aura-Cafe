@@ -377,9 +377,10 @@ export default function AdminDashboard() {
             className={`font-mono leading-tight text-left text-black bg-white size-${paperSize}`}
             style={{ fontSize: printerFontSize }}
           >
-            <div className="border-b border-dashed border-black pb-4 mb-4 text-left">
+            <div className="border-b border-dashed border-black pb-4 mb-4 text-center">
               <h2 className="text-lg font-black uppercase tracking-tighter">THE AURA CAFE</h2>
-              <p className="text-[10px]">123 Coffee Lane, Brew City</p>
+              <p className="text-[10px]">No : 70 , Collector Sivakumar Street</p>
+              <p className="text-[10px]">K.K Pudur, Saibaba Colony, Coimbatore</p>
               <p className="text-[10px]">Phone: +91 98765 43210</p>
             </div>
 
@@ -423,10 +424,13 @@ export default function AdminDashboard() {
                   <span>TOTAL AMOUNT:</span>
                   <span>{formatCurrency(printData.total)}</span>
                 </div>
+                <div className="text-right text-[10px] font-black tracking-wider text-black mt-1">
+                  GST INCLUDED
+                </div>
               </div>
             )}
 
-            <div className="mt-8 border-t border-dashed border-black pt-4">
+            <div className="mt-8 border-t border-dashed border-black pt-4 text-center">
                <p className="font-bold underline mb-1 uppercase tracking-widest">{printData.type === 'BILL' ? 'THANK YOU! VISIT AGAIN' : 'PROCEED TO COOKING'}</p>
                <p className="text-[9px] opacity-60">Generated via Aura Cafe POS Cloud</p>
             </div>
