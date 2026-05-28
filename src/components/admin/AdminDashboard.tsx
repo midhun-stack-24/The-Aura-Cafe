@@ -8,6 +8,7 @@ import {
   updateDoc, 
   getDocs,
   addDoc,
+  deleteDoc,
   serverTimestamp,
   where,
   orderBy
@@ -47,7 +48,9 @@ import {
   Coffee,
   Volume2,
   Monitor,
-  Bell
+  Bell,
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
 import { auth } from '../../lib/firebase.ts';
 import { signOut } from 'firebase/auth';
@@ -92,6 +95,9 @@ export default function AdminDashboard() {
   const [preferredPrinter, setPreferredPrinter] = React.useState<string>(() => {
     return localStorage.getItem('admin_printer_name') || 'TVS RP-3150 Gold (Wired USB)';
   });
+  const [preferredKitchenPrinter, setPreferredKitchenPrinter] = React.useState<string>(() => {
+    return localStorage.getItem('admin_kitchen_printer_name') || 'Epson TM-T82X (Wired USB)';
+  });
 
   React.useEffect(() => {
     localStorage.setItem('admin_printer_paper', paperSize);
@@ -104,6 +110,10 @@ export default function AdminDashboard() {
   React.useEffect(() => {
     localStorage.setItem('admin_printer_name', preferredPrinter);
   }, [preferredPrinter]);
+
+  React.useEffect(() => {
+    localStorage.setItem('admin_kitchen_printer_name', preferredKitchenPrinter);
+  }, [preferredKitchenPrinter]);
 
   // Sync state values to mutable refs so the subscription callback always reads the latest values
   const soundEnabledRef = React.useRef(soundEnabled);
@@ -366,6 +376,8 @@ export default function AdminDashboard() {
               setPrinterFontSize={setPrinterFontSize}
               preferredPrinter={preferredPrinter}
               setPreferredPrinter={setPreferredPrinter}
+              preferredKitchenPrinter={preferredKitchenPrinter}
+              setPreferredKitchenPrinter={setPreferredKitchenPrinter}
             />
           </div>
         )}
@@ -377,12 +389,19 @@ export default function AdminDashboard() {
             className={`font-mono leading-tight text-left text-black bg-white size-${paperSize}`}
             style={{ fontSize: printerFontSize }}
           >
-            <div className="border-b border-dashed border-black pb-4 mb-4 text-center">
-              <h2 className="text-lg font-black uppercase tracking-tighter">THE AURA CAFE</h2>
-              <p className="text-[10px]">No : 70 , Collector Sivakumar Street</p>
-              <p className="text-[10px]">K.K Pudur, Saibaba Colony, Coimbatore</p>
-              <p className="text-[10px]">Phone: +91 98765 43210</p>
-            </div>
+            {printData.type === 'BILL' ? (
+              <div className="border-b border-dashed border-black pb-4 mb-4 text-center">
+                <h2 className="text-lg font-black uppercase tracking-tighter">THE AURA CAFE</h2>
+                <p className="text-[10px]">No : 70 , Collector Sivakumar Street</p>
+                <p className="text-[10px]">K.K Pudur, Saibaba Colony, Coimbatore</p>
+                <p className="text-[10px]">Phone: +91 98765 43210</p>
+              </div>
+            ) : (
+              <div className="border-b border-dashed border-black pb-3 mb-3 text-center">
+                <h2 className="text-sm font-black uppercase tracking-wider bg-black text-white px-2 py-0.5 inline-block rounded mb-1">KITCHEN ORDER (KOT)</h2>
+                <p className="text-[9px] font-bold opacity-75">Target Kitchen Printer: {preferredKitchenPrinter}</p>
+              </div>
+            )}
 
             <div className="flex justify-between font-bold mb-2">
               <span className="uppercase">{printData.type === 'BILL' ? 'INVOICE' : 'KOT'}</span>
@@ -1581,7 +1600,9 @@ function AdminSettings({
   printerFontSize,
   setPrinterFontSize,
   preferredPrinter,
-  setPreferredPrinter
+  setPreferredPrinter,
+  preferredKitchenPrinter,
+  setPreferredKitchenPrinter
 }: { 
   sound: boolean,
   setSound: (v: boolean) => void,
@@ -1591,7 +1612,9 @@ function AdminSettings({
   printerFontSize: string,
   setPrinterFontSize: (v: string) => void,
   preferredPrinter: string,
-  setPreferredPrinter: (v: string) => void
+  setPreferredPrinter: (v: string) => void,
+  preferredKitchenPrinter: string,
+  setPreferredKitchenPrinter: (v: string) => void
 }) {
   const WIRED_PRINTERS_PRESETS = [
     'TVS RP-3150 Gold (Wired USB)',
@@ -1601,15 +1624,73 @@ function AdminSettings({
     'POS-58 series (Generic Wired USB)'
   ];
 
-  const [selectedPreset, setSelectedPreset] = React.useState<string>(() => {
+  const [isClearing, setIsClearing] = React.useState(false);
+  const [clearStatus, setClearStatus] = React.useState<string | null>(null);
+  const [clearSuccess, setClearSuccess] = React.useState(false);
+
+  const handleClearAllCollections = async () => {
+    if (!window.confirm("Are you sure you want to permanently delete all live orders, kitchen tickets, tables active states, and billing history? \n\nNo menu categories or dishes will be deleted. This action is irreversible.")) {
+      return;
+    }
+    
+    setIsClearing(true);
+    setClearStatus("Wiping Orders...");
+    try {
+      // 1. Clear orders
+      const ordersSnap = await getDocs(collection(db, 'orders'));
+      for (const d of ordersSnap.docs) {
+        await deleteDoc(doc(db, 'orders', d.id));
+      }
+      
+      setClearStatus("Wiping Bills...");
+      // 2. Clear bills
+      const billsSnap = await getDocs(collection(db, 'bills'));
+      for (const d of billsSnap.docs) {
+        await deleteDoc(doc(db, 'bills', d.id));
+      }
+
+      setClearStatus("Resetting Tables...");
+      // 3. Reset tables status to available
+      const tablesSnap = await getDocs(collection(db, 'tables'));
+      for (const d of tablesSnap.docs) {
+        await updateDoc(doc(db, 'tables', d.id), { status: 'available' });
+      }
+
+      setClearSuccess(true);
+      setTimeout(() => {
+        setClearSuccess(false);
+      }, 5000);
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to reset database: " + err.message);
+    } finally {
+      setIsClearing(false);
+      setClearStatus(null);
+    }
+  };
+
+  // Billing (Cashier) custom configuration states
+  const [billingPreset, setBillingPreset] = React.useState<string>(() => {
     if (WIRED_PRINTERS_PRESETS.includes(preferredPrinter)) {
       return preferredPrinter;
     }
     return 'Custom';
   });
 
-  const [customName, setCustomName] = React.useState<string>(() => {
+  const [billingCustomName, setBillingCustomName] = React.useState<string>(() => {
     return WIRED_PRINTERS_PRESETS.includes(preferredPrinter) ? '' : preferredPrinter;
+  });
+
+  // Kitchen (KOT) custom configuration states
+  const [kitchenPreset, setKitchenPreset] = React.useState<string>(() => {
+    if (WIRED_PRINTERS_PRESETS.includes(preferredKitchenPrinter)) {
+      return preferredKitchenPrinter;
+    }
+    return 'Custom';
+  });
+
+  const [kitchenCustomName, setKitchenCustomName] = React.useState<string>(() => {
+    return WIRED_PRINTERS_PRESETS.includes(preferredKitchenPrinter) ? '' : preferredKitchenPrinter;
   });
 
   const [usbDeviceName, setUsbDeviceName] = React.useState<string | null>(() => {
@@ -1618,7 +1699,7 @@ function AdminSettings({
 
   const [usbError, setUsbError] = React.useState<string | null>(null);
 
-  const handlePairUSB = async () => {
+  const handlePairUSB = async (target: 'BILL' | 'KOT') => {
     setUsbError(null);
     try {
       const nav = navigator as any;
@@ -1630,33 +1711,54 @@ function AdminSettings({
       const name = device.productName || `USB Device (${device.vendorId.toString(16).padStart(4, '0')}:${device.productId.toString(16).padStart(4, '0')})`;
       setUsbDeviceName(name);
       localStorage.setItem('paired_usb_device_name', name);
-      setPreferredPrinter(name);
-      setSelectedPreset('Custom');
-      setCustomName(name);
+      
+      if (target === 'BILL') {
+        setPreferredPrinter(name);
+        setBillingPreset('Custom');
+        setBillingCustomName(name);
+      } else {
+        setPreferredKitchenPrinter(name);
+        setKitchenPreset('Custom');
+        setKitchenCustomName(name);
+      }
     } catch (err: any) {
       console.error(err);
       if (err.name === 'NotFoundError') {
-        setUsbError("Wired hardware search cancelled. No device was selected in the browser popup.");
+        setUsbError("Wired hardware search cancelled. No device was selected.");
       } else if (err.name === 'SecurityError') {
-        setUsbError("Security permission blocked in iframe. Please open the dashboard in a separate tab (click the ↗ icon at the top right of your screen) to pair USB devices!");
+        setUsbError("Security permission blocked. Please open dashboard in a separate tab to pair USB device.");
       } else {
-        setUsbError(err.message || "Failed to scan for USB devices. Please check local cable connection.");
+        setUsbError(err.message || "Failed to scan for USB devices.");
       }
     }
   };
 
-  const handlePresetChange = (val: string) => {
-    setSelectedPreset(val);
+  const handleBillingPresetChange = (val: string) => {
+    setBillingPreset(val);
     if (val !== 'Custom') {
       setPreferredPrinter(val);
     } else {
-      setPreferredPrinter(customName || 'TVS Wired Printer');
+      setPreferredPrinter(billingCustomName || 'TVS RP-3150 Gold (Wired USB)');
     }
   };
 
-  const handleCustomNameChange = (val: string) => {
-    setCustomName(val);
+  const handleBillingCustomNameChange = (val: string) => {
+    setBillingCustomName(val);
     setPreferredPrinter(val);
+  };
+
+  const handleKitchenPresetChange = (val: string) => {
+    setKitchenPreset(val);
+    if (val !== 'Custom') {
+      setPreferredKitchenPrinter(val);
+    } else {
+      setPreferredKitchenPrinter(kitchenCustomName || 'Epson TM-T82X (Wired USB)');
+    }
+  };
+
+  const handleKitchenCustomNameChange = (val: string) => {
+    setKitchenCustomName(val);
+    setPreferredKitchenPrinter(val);
   };
 
   return (
@@ -1667,53 +1769,15 @@ function AdminSettings({
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Automation Card */}
+        {/* Billing Printer Config Card */}
         <div className="bg-white p-8 rounded-[2rem] border border-cafe-cream shadow-sm hover:shadow-md transition-all space-y-6">
           <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-aura-gold/10 text-aura-gold rounded-2xl flex items-center justify-center">
-              <LogOut size={24} className="rotate-180" />
-            </div>
-            <div>
-              <h3 className="font-bold text-cafe-espresso">Kitchen Automation</h3>
-              <p className="text-[10px] text-cafe-caramel uppercase font-black tracking-widest">Workflow Engine</p>
-            </div>
-          </div>
-
-          <div className="space-y-4 pt-4 border-t border-cafe-cream">
-            <div className="p-4 bg-aura-gold/5 rounded-2xl border border-aura-gold/10">
-              <div className="flex items-center space-x-2 text-cafe-espresso mb-1">
-                <Printer size={14} className="text-aura-gold" />
-                <span className="text-xs font-black uppercase tracking-widest">Manual Admin Control</span>
-              </div>
-              <p className="text-xs font-medium text-cafe-caramel leading-relaxed">
-                Automatic printing is disabled. Only the Admin/Billing staff can trigger prints by selecting the bill or order card and hitting the print button manually.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="font-bold text-sm text-cafe-espresso">Order Notification Sound</p>
-                <p className="text-xs text-cafe-caramel leading-relaxed">Play chime when a new order is received.</p>
-              </div>
-              <button 
-                onClick={() => setSound(!sound)}
-                className={`w-12 h-6 rounded-full relative transition-colors ${sound ? 'bg-aura-gold' : 'bg-gray-200'}`}
-              >
-                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${sound ? 'right-1' : 'left-1'}`} />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Hardware & Printer Config Card */}
-        <div className="bg-white p-8 rounded-[2rem] border border-cafe-cream shadow-sm hover:shadow-md transition-all space-y-6">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-aura-green/10 text-aura-green rounded-2xl flex items-center justify-center">
+            <div className="w-12 h-12 bg-aura-gold/15 text-aura-gold rounded-2xl flex items-center justify-center">
               <Printer size={24} />
             </div>
             <div>
-              <h3 className="font-bold text-cafe-espresso">Printer Settings</h3>
-              <p className="text-[10px] text-cafe-caramel uppercase font-black tracking-widest">Wired Device Configuration</p>
+              <h3 className="font-bold text-cafe-espresso">Billing Printer</h3>
+              <p className="text-[10px] text-cafe-caramel uppercase font-black tracking-widest">Receipts & Invoices</p>
             </div>
           </div>
 
@@ -1721,12 +1785,12 @@ function AdminSettings({
             {/* Preferred Printer Selector Dropdown */}
             <div className="space-y-2">
               <label className="block text-xs font-black uppercase text-cafe-caramel tracking-widest">
-                Select Your Connect Printer
+                Select Connected Device
               </label>
               
               <select
-                value={selectedPreset}
-                onChange={(e) => handlePresetChange(e.target.value)}
+                value={billingPreset}
+                onChange={(e) => handleBillingPresetChange(e.target.value)}
                 className="w-full px-4 py-3 rounded-xl border border-cafe-cream bg-white text-cafe-espresso text-sm font-bold focus:outline-none focus:ring-2 focus:ring-aura-gold focus:border-transparent transition-all"
               >
                 {WIRED_PRINTERS_PRESETS.map((preset) => (
@@ -1738,15 +1802,15 @@ function AdminSettings({
               </select>
 
               {/* Show text input ONLY if Custom is chosen */}
-              {selectedPreset === 'Custom' && (
+              {billingPreset === 'Custom' && (
                 <div className="mt-3 space-y-2">
                   <span className="block text-[10px] font-black uppercase text-cafe-caramel tracking-wider">
                     Enter Custom Device Name
                   </span>
                   <input
                     type="text"
-                    value={customName}
-                    onChange={(e) => handleCustomNameChange(e.target.value)}
+                    value={billingCustomName}
+                    onChange={(e) => handleBillingCustomNameChange(e.target.value)}
                     placeholder="e.g. TVS Wired Receipt Printer"
                     className="w-full px-4 py-3 rounded-xl border border-cafe-cream text-cafe-espresso text-sm font-bold focus:outline-none focus:ring-2 focus:ring-aura-gold focus:border-transparent transition-all"
                   />
@@ -1755,96 +1819,240 @@ function AdminSettings({
             </div>
 
             {/* Hardware-level WebUSB Scanner Option */}
-            <div className="p-4 bg-cafe-cream/20 rounded-2xl border border-cafe-cream space-y-3">
+            <div className="p-4 bg-cafe-cream/25 rounded-2xl border border-cafe-cream/60 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
                   <span className="block text-[10px] font-black uppercase text-cafe-caramel tracking-widest">
-                    Direct USB Hardware Sync
+                    Direct WebUSB Sync
                   </span>
                   <p className="text-[10px] text-cafe-espresso/70 mt-0.5">
-                    Scan and connect the physical TVS printer directly.
+                    Trigger direct browser pairing for TVS Billing printer.
                   </p>
                 </div>
-                {usbDeviceName ? (
-                  <span className="inline-flex items-center px-2 py-1 rounded bg-green-100 text-green-800 text-[9px] font-bold">
-                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1 animate-pulse" />
-                    Paired
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center px-2 py-1 rounded bg-gray-100 text-gray-400 text-[9px] font-bold">
-                    Not Paired
-                  </span>
-                )}
               </div>
-
-              {usbDeviceName && (
-                <p className="text-[11px] font-mono font-bold text-aura-green bg-white p-2 rounded-lg border border-cafe-cream/40">
-                  🔌 USB: {usbDeviceName}
-                </p>
-              )}
 
               <button
                 type="button"
-                onClick={handlePairUSB}
+                onClick={() => handlePairUSB('BILL')}
                 className="w-full py-2.5 px-4 bg-cafe-espresso text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-cafe-espresso/90 active:scale-95 transition-all text-center"
               >
-                🔍 Scan & Pair Wired USB Printer
+                🔍 Pair Billing USB Printer
               </button>
+            </div>
+            
+            <p className="text-[11px] font-mono font-bold text-cafe-caramel bg-cafe-cream/10 p-2.5 rounded-xl border border-cafe-cream">
+              📍 ACTIVE DEVICE: {preferredPrinter}
+            </p>
+          </div>
+        </div>
 
-              {usbError && (
-                <p className="text-[10px] text-red-600 font-bold leading-normal mt-2">
-                  ⚠️ {usbError}
-                </p>
+        {/* Kitchen KOT Printer Config Card */}
+        <div className="bg-white p-8 rounded-[2rem] border border-cafe-cream shadow-sm hover:shadow-md transition-all space-y-6">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 bg-aura-green/15 text-aura-green rounded-2xl flex items-center justify-center">
+              <UtensilsCrossed size={22} className="text-aura-green" />
+            </div>
+            <div>
+              <h3 className="font-bold text-cafe-espresso">Kitchen KOT Printer</h3>
+              <p className="text-[10px] text-cafe-caramel uppercase font-black tracking-widest">Food Order Slips</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 pt-4 border-t border-cafe-cream">
+            {/* Preferred Printer Selector Dropdown */}
+            <div className="space-y-2">
+              <label className="block text-xs font-black uppercase text-cafe-caramel tracking-widest">
+                Select Connected Device
+              </label>
+              
+              <select
+                value={kitchenPreset}
+                onChange={(e) => handleKitchenPresetChange(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-cafe-cream bg-white text-cafe-espresso text-sm font-bold focus:outline-none focus:ring-2 focus:ring-aura-gold focus:border-transparent transition-all"
+              >
+                {WIRED_PRINTERS_PRESETS.map((preset) => (
+                  <option key={preset} value={preset}>
+                    {preset}
+                  </option>
+                ))}
+                <option value="Custom">Custom / Pair Other USB Printer...</option>
+              </select>
+
+              {/* Show text input ONLY if Custom is chosen */}
+              {kitchenPreset === 'Custom' && (
+                <div className="mt-3 space-y-2">
+                  <span className="block text-[10px] font-black uppercase text-cafe-caramel tracking-wider">
+                    Enter Custom Device Name
+                  </span>
+                  <input
+                    type="text"
+                    value={kitchenCustomName}
+                    onChange={(e) => handleKitchenCustomNameChange(e.target.value)}
+                    placeholder="e.g. Kitchen Thermal Printer"
+                    className="w-full px-4 py-3 rounded-xl border border-cafe-cream text-cafe-espresso text-sm font-bold focus:outline-none focus:ring-2 focus:ring-aura-gold focus:border-transparent transition-all"
+                  />
+                </div>
               )}
             </div>
 
-            {/* Paper Size Sizer */}
-            <div className="space-y-2 pt-2">
+            {/* Hardware-level WebUSB Scanner Option */}
+            <div className="p-4 bg-cafe-cream/25 rounded-2xl border border-cafe-cream/60 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="block text-[10px] font-black uppercase text-cafe-caramel tracking-widest">
+                    Direct WebUSB Sync
+                  </span>
+                  <p className="text-[10px] text-cafe-espresso/70 mt-0.5">
+                    Trigger direct browser pairing for Kitchen printer.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handlePairUSB('KOT')}
+                className="w-full py-2.5 px-4 bg-cafe-espresso text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-cafe-espresso/90 active:scale-95 transition-all text-center"
+              >
+                🔍 Pair Kitchen USB Printer
+              </button>
+            </div>
+
+            <p className="text-[11px] font-mono font-bold text-aura-green bg-white p-2.5 rounded-xl border border-cafe-cream">
+              🍳 ACTIVE DEVICE: {preferredKitchenPrinter}
+            </p>
+          </div>
+        </div>
+
+        {/* General Printing Card */}
+        <div className="bg-white p-8 rounded-[2rem] border border-cafe-cream shadow-sm hover:shadow-md transition-all space-y-6 md:col-span-2">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 bg-cafe-cream/40 text-cafe-espresso rounded-2xl flex items-center justify-center">
+              <Settings size={22} />
+            </div>
+            <div>
+              <h3 className="font-bold text-cafe-espresso">General Printing & Workflow Settings</h3>
+              <p className="text-[10px] text-cafe-caramel uppercase font-black tracking-widest">Styles, Sounds & Media Widths</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-cafe-cream">
+            {/* Paper Width Option */}
+            <div className="space-y-2">
               <span className="block text-xs font-black uppercase text-cafe-caramel tracking-widest mb-1">
                 Paper Size Width
               </span>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setPaperSize('80mm')}
-                  className={`py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider text-center transition-all ${
+                  className={`py-3 px-3 rounded-xl font-bold text-xs uppercase tracking-wider text-center transition-all ${
                     paperSize === '80mm'
                       ? 'bg-cafe-espresso text-white shadow-md'
                       : 'bg-cafe-cream/30 text-cafe-caramel hover:bg-cafe-cream/50'
                   }`}
                 >
-                  80mm (Standard 3")
+                  80mm (3")
                 </button>
                 <button
                   type="button"
                   onClick={() => setPaperSize('58mm')}
-                  className={`py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider text-center transition-all ${
+                  className={`py-3 px-3 rounded-xl font-bold text-xs uppercase tracking-wider text-center transition-all ${
                     paperSize === '58mm'
                       ? 'bg-cafe-espresso text-white shadow-md'
                       : 'bg-cafe-cream/30 text-cafe-caramel hover:bg-cafe-cream/50'
                   }`}
                 >
-                  58mm (Compact 2")
+                  58mm (2")
                 </button>
               </div>
             </div>
 
-            {/* Font size sizer */}
-            <div className="space-y-2 pt-2">
+            {/* Font Sizer Option */}
+            <div className="space-y-2">
               <label className="block text-xs font-black uppercase text-cafe-caramel tracking-widest">
-                Print Font Sizing / Density
+                Print Font Density
               </label>
               <select
                 value={printerFontSize}
                 onChange={(e) => setPrinterFontSize(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-cafe-cream bg-white text-cafe-espresso text-sm font-bold focus:outline-none focus:ring-2 focus:ring-aura-gold focus:border-transparent transition-all"
+                className="w-full px-4 py-3 rounded-xl border border-cafe-cream bg-white text-cafe-espresso text-[11px] font-bold focus:outline-none focus:ring-2 focus:ring-aura-gold focus:border-transparent transition-all"
               >
-                <option value="9px">9px (Extra Small / Compact Roll)</option>
+                <option value="9px">9px (Extra Small)</option>
                 <option value="10px">10px (Small)</option>
-                <option value="11px">11px (Normal / Default)</option>
+                <option value="11px">11px (Normal)</option>
                 <option value="12px">12px (Medium)</option>
-                <option value="13px">13px (Large / High Contrast)</option>
+                <option value="13px">13px (Large)</option>
               </select>
+            </div>
+
+            {/* Sound Notification option */}
+            <div className="space-y-2">
+              <label className="block text-xs font-black uppercase text-cafe-caramel tracking-widest mb-1">
+                Workflow Audio Alert
+              </label>
+              <div className="flex items-center justify-between p-2 px-3 border border-cafe-cream rounded-xl bg-cafe-cream/10">
+                <span className="text-[11px] font-bold text-cafe-espresso">Incoming Sound Alarm</span>
+                <button 
+                  onClick={() => setSound(!sound)}
+                  className={`w-10 h-5 rounded-full relative transition-colors ${sound ? 'bg-aura-gold' : 'bg-gray-200'}`}
+                >
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${sound ? 'right-0.5' : 'left-0.5'}`} />
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          {usbError && (
+            <p className="text-[10px] text-red-600 font-bold leading-normal mt-2 bg-red-50 p-2.5 rounded-lg border border-red-200">
+              ⚠️ {usbError}
+            </p>
+          )}
+        </div>
+
+        {/* Maintenance / Reset Database Card */}
+        <div className="bg-red-50/40 p-8 rounded-[2rem] border border-red-200/50 shadow-sm hover:shadow-md transition-all space-y-6 md:col-span-2 animate-in fade-in duration-300">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 bg-red-100/80 text-red-600 rounded-2xl flex items-center justify-center">
+              <Trash2 size={22} className="text-red-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-cafe-espresso">Database Maintenance (Wipe & Clean)</h3>
+              <p className="text-[10px] text-red-700/80 uppercase font-black tracking-widest">Fresh Start Terminal Reset</p>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-red-200/50 space-y-3">
+            <p className="text-xs text-cafe-espresso/80 leading-relaxed">
+              If you want to clear old sales test data, cancel active bills, and start with a completely pristine café billing dashboard, click below to wipe order documents, reset active table booking flags, and clean current performance logs.
+              <br />
+              <strong className="text-red-700 font-bold">⚠️ Warning: This will delete files inside the 'orders' and 'bills' collections permanently. Menu item catalogs and recipes are safe.</strong>
+            </p>
+
+            <div className="flex flex-wrap gap-3 items-center pt-2">
+              <button
+                type="button"
+                disabled={isClearing}
+                onClick={handleClearAllCollections}
+                className="inline-flex items-center space-x-2 px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-bold uppercase text-[11px] tracking-wider rounded-xl transition-all shadow-md hover:shadow-lg active:scale-95 cursor-pointer"
+              >
+                {isClearing ? (
+                  <>
+                    <RefreshCw size={13} className="animate-spin" />
+                    <span>{clearStatus || 'Wiping...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={13} />
+                    <span>Wipe All Orders & Start Fresh</span>
+                  </>
+                )}
+              </button>
+
+              {clearSuccess && (
+                <span className="text-xs font-bold text-green-700 bg-green-100/90 border border-green-200 px-4 py-2 rounded-xl animate-pulse">
+                  🎉 Database reset successful! Dashboard is now 100% fresh!
+                </span>
+              )}
             </div>
           </div>
         </div>
