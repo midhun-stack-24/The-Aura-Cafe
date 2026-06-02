@@ -54,6 +54,7 @@ import {
 } from 'lucide-react';
 import { auth } from '../../lib/firebase.ts';
 import { signOut } from 'firebase/auth';
+import { forceResetAndSeed, seedDatabase } from '../../lib/seedData.ts';
 
 enum OperationType {
   CREATE = 'create',
@@ -135,6 +136,12 @@ export default function AdminDashboard() {
 
   React.useEffect(() => {
     const check = async () => {
+      try {
+        await seedDatabase();
+      } catch (err) {
+        console.error("Initial seeding checked/failed", err);
+      }
+
       if (auth.currentUser) {
         try {
            const { getDoc } = await import('firebase/firestore');
@@ -1669,6 +1676,29 @@ function AdminSettings({
     }
   };
 
+  const [isResettingMenu, setIsResettingMenu] = React.useState(false);
+  const [resetMenuSuccess, setResetMenuSuccess] = React.useState(false);
+
+  const handleResetMenuCatalog = async () => {
+    if (!window.confirm("Are you sure you want to completely RESET the menu catalog? \n\nAll existing menu items and categories will be permanently deleted and replaced with the updated ones from your official menu (including Cakes with 0.5kg/1kg sizes, Hot/Cold Beverages, Cocktails/Mojitos, Pastas, Sweets, Snacks, and Fresh Juices). This is highly recommended to update your products, pricing, and category structures.")) {
+      return;
+    }
+
+    setIsResettingMenu(true);
+    try {
+      await forceResetAndSeed();
+      setResetMenuSuccess(true);
+      setTimeout(() => {
+        setResetMenuSuccess(false);
+      }, 5000);
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to reset menu catalog: " + err.message);
+    } finally {
+      setIsResettingMenu(false);
+    }
+  };
+
   // Billing (Cashier) custom configuration states
   const [billingPreset, setBillingPreset] = React.useState<string>(() => {
     if (WIRED_PRINTERS_PRESETS.includes(preferredPrinter)) {
@@ -2021,38 +2051,72 @@ function AdminSettings({
             </div>
           </div>
 
-          <div className="pt-4 border-t border-red-200/50 space-y-3">
-            <p className="text-xs text-cafe-espresso/80 leading-relaxed">
-              If you want to clear old sales test data, cancel active bills, and start with a completely pristine café billing dashboard, click below to wipe order documents, reset active table booking flags, and clean current performance logs.
-              <br />
-              <strong className="text-red-700 font-bold">⚠️ Warning: This will delete files inside the 'orders' and 'bills' collections permanently. Menu item catalogs and recipes are safe.</strong>
-            </p>
+          <div className="pt-4 border-t border-red-200/50 space-y-4">
+            <div className="space-y-3">
+              <p className="text-xs text-cafe-espresso/80 leading-relaxed">
+                If you want to clear old sales test data, cancel active bills, and start with a completely pristine café billing dashboard, click below to wipe order documents, reset active table booking flags, and clean current performance logs.
+                <br />
+                <strong className="text-red-700 font-bold">⚠️ Warning: This will delete files inside the 'orders' and 'bills' collections permanently. Menu item catalogs and recipes are safe.</strong>
+              </p>
 
-            <div className="flex flex-wrap gap-3 items-center pt-2">
-              <button
-                type="button"
-                disabled={isClearing}
-                onClick={handleClearAllCollections}
-                className="inline-flex items-center space-x-2 px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-bold uppercase text-[11px] tracking-wider rounded-xl transition-all shadow-md hover:shadow-lg active:scale-95 cursor-pointer"
-              >
-                {isClearing ? (
-                  <>
-                    <RefreshCw size={13} className="animate-spin" />
-                    <span>{clearStatus || 'Wiping...'}</span>
-                  </>
-                ) : (
-                  <>
-                    <Trash2 size={13} />
-                    <span>Wipe All Orders & Start Fresh</span>
-                  </>
+              <div className="flex flex-wrap gap-3 items-center pt-1">
+                <button
+                  type="button"
+                  disabled={isClearing}
+                  onClick={handleClearAllCollections}
+                  className="inline-flex items-center space-x-2 px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-bold uppercase text-[11px] tracking-wider rounded-xl transition-all shadow-md hover:shadow-lg active:scale-95 cursor-pointer"
+                >
+                  {isClearing ? (
+                    <>
+                      <RefreshCw size={13} className="animate-spin" />
+                      <span>{clearStatus || 'Wiping...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={13} />
+                      <span>Wipe All Orders & Start Fresh</span>
+                    </>
+                  )}
+                </button>
+
+                {clearSuccess && (
+                  <span className="text-xs font-bold text-green-700 bg-green-100/90 border border-green-200 px-4 py-2 rounded-xl animate-pulse">
+                    🎉 Database reset successful! Dashboard is now 100% fresh!
+                  </span>
                 )}
-              </button>
+              </div>
+            </div>
 
-              {clearSuccess && (
-                <span className="text-xs font-bold text-green-700 bg-green-100/90 border border-green-200 px-4 py-2 rounded-xl animate-pulse">
-                  🎉 Database reset successful! Dashboard is now 100% fresh!
-                </span>
-              )}
+            <div className="border-t border-red-200/50 pt-4 space-y-3">
+              <p className="text-xs text-cafe-espresso/80 leading-relaxed">
+                If you wish to update the menu items, pricing, and category divisions with the official, newly updated digital catalog (consisting of Cakes with 0.5kg/1kg sizes, Snacks & Sides, Burgers, Sandwiches, Desserts, Pasta, Beverages, Juices, Frappes, Avil Milk, and Mojitos), trigger a clean catalog reset.
+              </p>
+              <div className="flex flex-wrap gap-3 items-center">
+                <button
+                  type="button"
+                  disabled={isResettingMenu}
+                  onClick={handleResetMenuCatalog}
+                  className="inline-flex items-center space-x-2 px-6 py-3 bg-aura-gold hover:bg-aura-gold/90 disabled:bg-aura-gold/50 text-cafe-espresso font-bold uppercase text-[11px] tracking-wider rounded-xl transition-all shadow-lg hover:shadow-xl active:scale-95 cursor-pointer"
+                >
+                  {isResettingMenu ? (
+                    <>
+                      <RefreshCw size={13} className="animate-spin" />
+                      <span>Resetting Menu...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UtensilsCrossed size={13} />
+                      <span>Reset & Seed Menu Category & Product Pricing</span>
+                    </>
+                  )}
+                </button>
+
+                {resetMenuSuccess && (
+                  <span className="text-xs font-bold text-green-700 bg-green-100/90 border border-green-200 px-4 py-2 rounded-xl animate-pulse">
+                    🎉 Menu update successful! Entire official menu catalog seeded!
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
