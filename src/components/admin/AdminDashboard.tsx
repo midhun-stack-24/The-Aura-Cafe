@@ -420,6 +420,9 @@ export default function AdminDashboard() {
             <div className="border-b border-dashed border-black pb-2 mb-2">
               <p className="text-[10px]">DATE: {printData.createdAt ? new Date(printData.createdAt).toLocaleString() : new Date().toLocaleString()}</p>
               {printData.id && <p className="text-[10px]">TXN ID: #{printData.id.slice(-6).toUpperCase()}</p>}
+              {printData.type === 'BILL' && printData.paymentMethod && (
+                <p className="text-[10px] font-bold">PAYMENT MODE: {String(printData.paymentMethod).toUpperCase()}</p>
+              )}
             </div>
 
             <table className="w-full text-left mb-4">
@@ -813,6 +816,7 @@ function BillingPOS({ onPrint, orders: propOrders }: { onPrint: (data: any) => v
   const [hideTableNo, setHideTableNo] = React.useState(false);
   const [useCustomDate, setUseCustomDate] = React.useState(false);
   const [billingDate, setBillingDate] = React.useState(() => new Date().toISOString().split('T')[0]);
+  const [paymentMethodSelected, setPaymentMethodSelected] = React.useState<'cash' | 'upi'>('upi');
 
   React.useEffect(() => {
     onSnapshot(collection(db, 'menuItems'), snap => setItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -941,7 +945,7 @@ function BillingPOS({ onPrint, orders: propOrders }: { onPrint: (data: any) => v
         subtotal,
         tax: 0,
         total,
-        paymentMethod: 'upi', 
+        paymentMethod: paymentMethodSelected, 
         createdAt: finalCreatedAt,
         orderIds: activeOrders.map(o => o.id),
         hideTableNumber: hideTableNo
@@ -1148,6 +1152,35 @@ function BillingPOS({ onPrint, orders: propOrders }: { onPrint: (data: any) => v
                    className="w-full bg-cafe-cream/40 px-2 py-1.5 rounded-lg border border-cafe-cream font-bold text-xs text-cafe-espresso focus:ring-1 focus:ring-cafe-caramel"
                  />
                )}
+             </div>
+           </div>
+
+           {/* Payment Mode Segmented Selector */}
+           <div className="bg-white p-3 rounded-xl border border-cafe-cream space-y-1.5 mb-3">
+             <span className="text-[10px] uppercase font-bold tracking-wider text-cafe-caramel block mb-1">Select Payment Mode</span>
+             <div className="grid grid-cols-2 gap-2">
+               <button
+                 type="button"
+                 onClick={() => setPaymentMethodSelected('cash')}
+                 className={`py-2 px-3 rounded-xl font-black text-xs uppercase tracking-wider border transition-all cursor-pointer flex items-center justify-center space-x-1 ${
+                   paymentMethodSelected === 'cash'
+                     ? 'bg-cafe-caramel text-white border-cafe-caramel shadow-sm'
+                     : 'bg-white text-cafe-caramel border-cafe-cream hover:bg-cafe-cream/20'
+                 }`}
+               >
+                 <span>💵 CASH</span>
+               </button>
+               <button
+                 type="button"
+                 onClick={() => setPaymentMethodSelected('upi')}
+                 className={`py-2 px-3 rounded-xl font-black text-xs uppercase tracking-wider border transition-all cursor-pointer flex items-center justify-center space-x-1 ${
+                   paymentMethodSelected === 'upi'
+                     ? 'bg-cafe-caramel text-white border-cafe-caramel shadow-sm'
+                     : 'bg-white text-cafe-caramel border-cafe-cream hover:bg-cafe-cream/20'
+                 }`}
+               >
+                 <span>📱 UPI</span>
+               </button>
              </div>
            </div>
 
@@ -1439,6 +1472,7 @@ function ReportsView() {
                 <th className="p-6">Bill ID</th>
                 <th className="p-6">Table</th>
                 <th className="p-6">Date</th>
+                <th className="p-6">Method</th>
                 <th className="p-6 text-right">Amount</th>
                 <th className="p-6 text-center">Actions</th>
               </tr>
@@ -1462,6 +1496,15 @@ function ReportsView() {
                       ) : (
                         <span>{String(bill.createdAt || '').split('T')[0]}</span>
                       )}
+                    </td>
+                    <td className="p-6">
+                      <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
+                        (bill.paymentMethod || 'upi').toLowerCase() === 'upi'
+                          ? 'bg-blue-100 text-blue-700 border border-blue-200/50'
+                          : 'bg-emerald-100 text-emerald-700 border border-emerald-200/50'
+                      }`}>
+                        {bill.paymentMethod || 'upi'}
+                      </span>
                     </td>
                     <td className="p-6 text-right font-black text-cafe-espresso">{formatCurrency(bill.total)}</td>
                     <td className="p-6 text-center">
