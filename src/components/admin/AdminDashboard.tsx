@@ -412,11 +412,13 @@ export default function AdminDashboard() {
 
             <div className="flex justify-between font-bold mb-2">
               <span className="uppercase">{printData.type === 'BILL' ? 'INVOICE' : 'KOT'}</span>
-              <span className="uppercase">TABLE: {printData.tableNumber}</span>
+              {!(printData.type === 'BILL' && printData.hideTableNumber) && (
+                <span className="uppercase">TABLE: {printData.tableNumber}</span>
+              )}
             </div>
             
             <div className="border-b border-dashed border-black pb-2 mb-2">
-              <p className="text-[10px]">DATE: {new Date().toLocaleString()}</p>
+              <p className="text-[10px]">DATE: {printData.createdAt ? new Date(printData.createdAt).toLocaleString() : new Date().toLocaleString()}</p>
               {printData.id && <p className="text-[10px]">TXN ID: #{printData.id.slice(-6).toUpperCase()}</p>}
             </div>
 
@@ -808,6 +810,9 @@ function BillingPOS({ onPrint, orders: propOrders }: { onPrint: (data: any) => v
   const [loading, setLoading] = React.useState(false);
   const [activeOrders, setActiveOrders] = React.useState<Order[]>([]);
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [hideTableNo, setHideTableNo] = React.useState(false);
+  const [useCustomDate, setUseCustomDate] = React.useState(false);
+  const [billingDate, setBillingDate] = React.useState(() => new Date().toISOString().split('T')[0]);
 
   React.useEffect(() => {
     onSnapshot(collection(db, 'menuItems'), snap => setItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -922,6 +927,14 @@ function BillingPOS({ onPrint, orders: propOrders }: { onPrint: (data: any) => v
       const subtotal = cart.reduce((s, i) => s + (i.price * i.quantity), 0);
       const total = subtotal; // Tax removed
 
+      let finalCreatedAt = new Date().toISOString();
+      if (useCustomDate && billingDate) {
+        const currentDate = new Date();
+        const selectedDate = new Date(billingDate);
+        selectedDate.setHours(currentDate.getHours(), currentDate.getMinutes(), currentDate.getSeconds());
+        finalCreatedAt = selectedDate.toISOString();
+      }
+
       const billData = {
         tableNumber: table.trim() || 'Takeaway',
         items: cart,
@@ -929,8 +942,9 @@ function BillingPOS({ onPrint, orders: propOrders }: { onPrint: (data: any) => v
         tax: 0,
         total,
         paymentMethod: 'upi', 
-        createdAt: new Date().toISOString(),
-        orderIds: activeOrders.map(o => o.id)
+        createdAt: finalCreatedAt,
+        orderIds: activeOrders.map(o => o.id),
+        hideTableNumber: hideTableNo
       };
 
       await addDoc(collection(db, 'bills'), billData);
@@ -1088,8 +1102,56 @@ function BillingPOS({ onPrint, orders: propOrders }: { onPrint: (data: any) => v
           ))}
         </div>
         
-        <div className="p-5 bg-cafe-cream/30 border-t border-cafe-cream space-y-2 shrink-0">
-           <div className="flex justify-between text-cafe-espresso font-black text-xl pt-3">
+        <div className="p-5 bg-cafe-cream/30 border-t border-cafe-cream space-y-3 shrink-0 text-cafe-espresso">
+           {/* Receipt Options and Custom Billing Date */}
+           <div className="bg-white p-3 rounded-xl border border-cafe-cream space-y-2">
+             <p className="text-[10px] uppercase font-bold tracking-wider text-cafe-caramel">Receipt & Date Options</p>
+             
+             {/* Toggle to Omit table details */}
+             <div className="flex items-center space-x-2">
+               <input 
+                 type="checkbox" 
+                 id="posHideTable"
+                 checked={hideTableNo}
+                 onChange={e => setHideTableNo(e.target.checked)}
+                 className="rounded text-cafe-caramel focus:ring-cafe-caramel border-cafe-cream w-4 h-4 cursor-pointer"
+               />
+               <label htmlFor="posHideTable" className="text-xs font-bold text-cafe-espresso select-none cursor-pointer">
+                 Omit Table No. on Receipt
+               </label>
+             </div>
+
+             {/* Backdating / Custom Date Selector */}
+             <div className="space-y-1 pt-1 border-t border-cafe-cream/55">
+               <div className="flex items-center justify-between">
+                 <span className="text-xs font-bold text-cafe-espresso font-semibold">Custom Bill Date</span>
+                 <input 
+                   type="checkbox" 
+                   id="posCustomDateCheck"
+                   checked={useCustomDate}
+                   onChange={e => {
+                     setUseCustomDate(e.target.checked);
+                     if (!e.target.checked) {
+                       setBillingDate(new Date().toISOString().split('T')[0]);
+                     }
+                   }}
+                   className="rounded text-cafe-caramel focus:ring-cafe-caramel border-cafe-cream w-3.5 h-3.5 cursor-pointer"
+                 />
+               </div>
+               
+               {useCustomDate && (
+                 <input 
+                   type="date"
+                   value={billingDate}
+                   max={new Date().toISOString().split('T')[0]} // restrict future dates
+                   onChange={e => setBillingDate(e.target.value)}
+                   className="w-full bg-cafe-cream/40 px-2 py-1.5 rounded-lg border border-cafe-cream font-bold text-xs text-cafe-espresso focus:ring-1 focus:ring-cafe-caramel"
+                 />
+               )}
+             </div>
+           </div>
+
+           <div className="flex justify-between text-cafe-espresso font-black text-xl pt-2">
              <span>TOTAL</span>
              <span>{formatCurrency(total)}</span>
            </div>
@@ -1112,6 +1174,31 @@ function ReportsView() {
   const [loading, setLoading] = React.useState(true);
   const [filterType, setFilterType] = React.useState<'day' | 'month' | 'custom'>('day');
   const [selectedDate, setSelectedDate] = React.useState(new Date().toISOString().split('T')[0]);
+
+  const [editingBillId, setEditingBillId] = React.useState<string | null>(null);
+  const [editDateValue, setEditDateValue] = React.useState<string>('');
+  const [isSavingDate, setIsSavingDate] = React.useState(false);
+
+  const handleUpdateBillDate = async (billId: string, originalCreatedAt: string) => {
+    if (!editDateValue) return;
+    setIsSavingDate(true);
+    try {
+      const originalDate = new Date(originalCreatedAt || new Date());
+      const [year, month, day] = editDateValue.split('-');
+      const newDate = new Date(originalDate);
+      newDate.setFullYear(parseInt(year), parseInt(month) - 1, parseInt(day));
+      
+      const { doc, updateDoc } = await import('firebase/firestore');
+      await updateDoc(doc(db, 'bills', billId), {
+        createdAt: newDate.toISOString()
+      });
+      setEditingBillId(null);
+    } catch (err: any) {
+      alert("Failed to update bill date: " + err.message);
+    } finally {
+      setIsSavingDate(false);
+    }
+  };
 
   React.useEffect(() => {
     if (filterType === 'month' && selectedDate.length > 7) {
@@ -1353,17 +1440,63 @@ function ReportsView() {
                 <th className="p-6">Table</th>
                 <th className="p-6">Date</th>
                 <th className="p-6 text-right">Amount</th>
+                <th className="p-6 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="text-sm">
-              {filteredBills.slice(0, 100).map(bill => (
-                <tr key={bill.id} className="border-b border-cafe-cream/20 hover:bg-cafe-cream/10">
-                  <td className="p-6 font-mono text-xs uppercase">#{bill.id.slice(-6)}</td>
-                  <td className="p-6 font-bold">{bill.tableNumber}</td>
-                  <td className="p-6 text-cafe-caramel">{String(bill.createdAt || '').split('T')[0]}</td>
-                  <td className="p-6 text-right font-black text-cafe-espresso">{formatCurrency(bill.total)}</td>
-                </tr>
-              ))}
+              {filteredBills.slice(0, 100).map(bill => {
+                const isEditing = editingBillId === bill.id;
+                return (
+                  <tr key={bill.id} className="border-b border-cafe-cream/20 hover:bg-cafe-cream/10">
+                    <td className="p-6 font-mono text-xs uppercase">#{bill.id.slice(-6)}</td>
+                    <td className="p-6 font-bold">{bill.tableNumber}</td>
+                    <td className="p-6 text-cafe-caramel">
+                      {isEditing ? (
+                        <input 
+                          type="date"
+                          value={editDateValue}
+                          max={new Date().toISOString().split('T')[0]}
+                          onChange={e => setEditDateValue(e.target.value)}
+                          className="px-2 py-1 bg-cafe-cream border border-cafe-cream rounded font-bold text-xs outline-none focus:ring-1 focus:ring-cafe-caramel text-cafe-espresso"
+                        />
+                      ) : (
+                        <span>{String(bill.createdAt || '').split('T')[0]}</span>
+                      )}
+                    </td>
+                    <td className="p-6 text-right font-black text-cafe-espresso">{formatCurrency(bill.total)}</td>
+                    <td className="p-6 text-center">
+                      {isEditing ? (
+                        <div className="flex justify-center space-x-2">
+                          <button
+                            disabled={isSavingDate}
+                            onClick={() => handleUpdateBillDate(bill.id, bill.createdAt)}
+                            className="bg-green-600 hover:bg-green-700 text-white font-black text-[10px] px-3 py-1.5 rounded-lg uppercase tracking-wider shadow active:scale-95 transition-all"
+                          >
+                            Save
+                          </button>
+                          <button
+                            disabled={isSavingDate}
+                            onClick={() => setEditingBillId(null)}
+                            className="bg-gray-400 hover:bg-gray-500 text-white font-black text-[10px] px-3 py-1.5 rounded-lg uppercase tracking-wider active:scale-95 transition-all"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditingBillId(bill.id);
+                            setEditDateValue(String(bill.createdAt || '').split('T')[0]);
+                          }}
+                          className="bg-cafe-caramel/10 hover:bg-cafe-caramel/20 text-cafe-caramel font-black text-[10px] px-3 py-1.5 rounded-lg uppercase tracking-wider transition-all"
+                        >
+                          Change Date
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
