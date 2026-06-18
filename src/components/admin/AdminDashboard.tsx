@@ -1071,7 +1071,7 @@ function BillingPOS({ onPrint, orders: propOrders }: { onPrint: (data: any) => v
              </div>
            </div>
         
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0 creative-scroll">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 creative-scroll">
           {cart.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-40">
               <div className="w-12 h-12 bg-cafe-cream rounded-full flex items-center justify-center text-cafe-caramel mb-3">
@@ -1081,109 +1081,115 @@ function BillingPOS({ onPrint, orders: propOrders }: { onPrint: (data: any) => v
               <p className="text-[10px] text-cafe-caramel mt-2 font-medium">Add items manually or fetch orders for Table {table}</p>
             </div>
           )}
-          {cart.map((item, idx) => (
-            <div key={`${item.id}-${idx}`} className="flex justify-between items-center p-2 rounded-xl hover:bg-cafe-cream/30 transition-colors animate-in fade-in slide-in-from-right-4">
-              <div className="flex-1 min-w-0 pr-2">
-                <p className="font-bold text-xs text-cafe-espresso truncate">{item.name}</p>
-                <p className="text-[10px] text-cafe-caramel font-bold">{formatCurrency(item.price)}</p>
-              </div>
-              <div className="flex items-center space-x-2 shrink-0">
-                <button 
-                  onClick={() => {
-                    if (item.quantity > 1) setCart(cart.map((c, i) => i === idx ? { ...c, quantity: c.quantity - 1 } : c));
-                    else setCart(cart.filter((_, i) => i !== idx));
-                  }}
-                  className="p-1 bg-cafe-cream rounded-lg text-cafe-espresso hover:bg-cafe-espresso hover:text-white transition-colors"
-                ><Minus size={12} /></button>
-                <span className="font-black text-xs w-4 text-center">{item.quantity}</span>
-                <button 
-                  onClick={() => setCart(cart.map((c, i) => i === idx ? { ...c, quantity: c.quantity + 1 } : c))}
-                  className="p-1 bg-cafe-espresso text-white rounded-lg hover:shadow-md transition-all"
-                ><Plus size={12} /></button>
-              </div>
-              <p className="w-16 text-right font-black text-xs text-cafe-espresso ml-2">{formatCurrency(item.price * item.quantity)}</p>
+          {cart.length > 0 && (
+            <div className="space-y-3">
+              {cart.map((item, idx) => (
+                <div key={`${item.id}-${idx}`} className="flex justify-between items-center p-2 rounded-xl hover:bg-cafe-cream/30 transition-colors animate-in fade-in slide-in-from-right-4">
+                  <div className="flex-1 min-w-0 pr-2">
+                    <p className="font-bold text-xs text-cafe-espresso truncate">{item.name}</p>
+                    <p className="text-[10px] text-cafe-caramel font-bold">{formatCurrency(item.price)}</p>
+                  </div>
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <button 
+                      onClick={() => {
+                        if (item.quantity > 1) setCart(cart.map((c, i) => i === idx ? { ...c, quantity: c.quantity - 1 } : c));
+                        else setCart(cart.filter((_, i) => i !== idx));
+                      }}
+                      className="p-1 bg-cafe-cream rounded-lg text-cafe-espresso hover:bg-cafe-espresso hover:text-white transition-colors"
+                    ><Minus size={12} /></button>
+                    <span className="font-black text-xs w-4 text-center">{item.quantity}</span>
+                    <button 
+                      onClick={() => setCart(cart.map((c, i) => i === idx ? { ...c, quantity: c.quantity + 1 } : c))}
+                      className="p-1 bg-cafe-espresso text-white rounded-lg hover:shadow-md transition-all"
+                    ><Plus size={12} /></button>
+                  </div>
+                  <p className="w-16 text-right font-black text-xs text-cafe-espresso ml-2">{formatCurrency(item.price * item.quantity)}</p>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+
+          <div className="border-t border-cafe-cream/50 my-4" />
+
+          {/* Receipt Options and Custom Billing Date */}
+          <div className="bg-white p-3.5 rounded-xl border border-cafe-cream space-y-2">
+            <p className="text-[10px] uppercase font-bold tracking-wider text-cafe-caramel">Receipt & Date Options</p>
+            
+            {/* Toggle to Omit table details */}
+            <div className="flex items-center space-x-2">
+              <input 
+                type="checkbox" 
+                id="posHideTable"
+                checked={hideTableNo}
+                onChange={e => setHideTableNo(e.target.checked)}
+                className="rounded text-cafe-caramel focus:ring-cafe-caramel border-cafe-cream w-4 h-4 cursor-pointer"
+              />
+              <label htmlFor="posHideTable" className="text-xs font-bold text-cafe-espresso select-none cursor-pointer">
+                Omit Table No. on Receipt
+              </label>
+            </div>
+
+            {/* Backdating / Custom Date Selector */}
+            <div className="space-y-1 pt-1 border-t border-cafe-cream/55">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-cafe-espresso font-semibold">Custom Bill Date</span>
+                <input 
+                  type="checkbox" 
+                  id="posCustomDateCheck"
+                  checked={useCustomDate}
+                  onChange={e => {
+                    setUseCustomDate(e.target.checked);
+                    if (!e.target.checked) {
+                      setBillingDate(new Date().toISOString().split('T')[0]);
+                    }
+                  }}
+                  className="rounded text-cafe-caramel focus:ring-cafe-caramel border-cafe-cream w-3.5 h-3.5 cursor-pointer"
+                />
+              </div>
+              
+              {useCustomDate && (
+                <input 
+                  type="date"
+                  value={billingDate}
+                  max={new Date().toISOString().split('T')[0]} // restrict future dates
+                  onChange={e => setBillingDate(e.target.value)}
+                  className="w-full bg-cafe-cream/40 px-2 py-1.5 rounded-lg border border-cafe-cream font-bold text-xs text-cafe-espresso focus:ring-1 focus:ring-cafe-caramel"
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Payment Mode Segmented Selector */}
+          <div className="bg-white p-3.5 rounded-xl border border-cafe-cream space-y-1.5">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-cafe-caramel block mb-1">Select Payment Mode</span>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setPaymentMethodSelected('cash')}
+                className={`py-2 px-3 rounded-xl font-black text-xs uppercase tracking-wider border transition-all cursor-pointer flex items-center justify-center space-x-1 ${
+                  paymentMethodSelected === 'cash'
+                    ? 'bg-cafe-caramel text-white border-cafe-caramel shadow-sm'
+                    : 'bg-white text-cafe-caramel border-cafe-cream hover:bg-cafe-cream/20'
+                }`}
+              >
+                <span>💵 CASH</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMethodSelected('upi')}
+                className={`py-2 px-3 rounded-xl font-black text-xs uppercase tracking-wider border transition-all cursor-pointer flex items-center justify-center space-x-1 ${
+                  paymentMethodSelected === 'upi'
+                    ? 'bg-cafe-caramel text-white border-cafe-caramel shadow-sm'
+                    : 'bg-white text-cafe-caramel border-cafe-cream hover:bg-cafe-cream/20'
+                }`}
+              >
+                <span>📱 UPI</span>
+              </button>
+            </div>
+          </div>
         </div>
         
         <div className="p-5 bg-cafe-cream/30 border-t border-cafe-cream space-y-3 shrink-0 text-cafe-espresso">
-           {/* Receipt Options and Custom Billing Date */}
-           <div className="bg-white p-3 rounded-xl border border-cafe-cream space-y-2">
-             <p className="text-[10px] uppercase font-bold tracking-wider text-cafe-caramel">Receipt & Date Options</p>
-             
-             {/* Toggle to Omit table details */}
-             <div className="flex items-center space-x-2">
-               <input 
-                 type="checkbox" 
-                 id="posHideTable"
-                 checked={hideTableNo}
-                 onChange={e => setHideTableNo(e.target.checked)}
-                 className="rounded text-cafe-caramel focus:ring-cafe-caramel border-cafe-cream w-4 h-4 cursor-pointer"
-               />
-               <label htmlFor="posHideTable" className="text-xs font-bold text-cafe-espresso select-none cursor-pointer">
-                 Omit Table No. on Receipt
-               </label>
-             </div>
-
-             {/* Backdating / Custom Date Selector */}
-             <div className="space-y-1 pt-1 border-t border-cafe-cream/55">
-               <div className="flex items-center justify-between">
-                 <span className="text-xs font-bold text-cafe-espresso font-semibold">Custom Bill Date</span>
-                 <input 
-                   type="checkbox" 
-                   id="posCustomDateCheck"
-                   checked={useCustomDate}
-                   onChange={e => {
-                     setUseCustomDate(e.target.checked);
-                     if (!e.target.checked) {
-                       setBillingDate(new Date().toISOString().split('T')[0]);
-                     }
-                   }}
-                   className="rounded text-cafe-caramel focus:ring-cafe-caramel border-cafe-cream w-3.5 h-3.5 cursor-pointer"
-                 />
-               </div>
-               
-               {useCustomDate && (
-                 <input 
-                   type="date"
-                   value={billingDate}
-                   max={new Date().toISOString().split('T')[0]} // restrict future dates
-                   onChange={e => setBillingDate(e.target.value)}
-                   className="w-full bg-cafe-cream/40 px-2 py-1.5 rounded-lg border border-cafe-cream font-bold text-xs text-cafe-espresso focus:ring-1 focus:ring-cafe-caramel"
-                 />
-               )}
-             </div>
-           </div>
-
-           {/* Payment Mode Segmented Selector */}
-           <div className="bg-white p-3 rounded-xl border border-cafe-cream space-y-1.5 mb-3">
-             <span className="text-[10px] uppercase font-bold tracking-wider text-cafe-caramel block mb-1">Select Payment Mode</span>
-             <div className="grid grid-cols-2 gap-2">
-               <button
-                 type="button"
-                 onClick={() => setPaymentMethodSelected('cash')}
-                 className={`py-2 px-3 rounded-xl font-black text-xs uppercase tracking-wider border transition-all cursor-pointer flex items-center justify-center space-x-1 ${
-                   paymentMethodSelected === 'cash'
-                     ? 'bg-cafe-caramel text-white border-cafe-caramel shadow-sm'
-                     : 'bg-white text-cafe-caramel border-cafe-cream hover:bg-cafe-cream/20'
-                 }`}
-               >
-                 <span>💵 CASH</span>
-               </button>
-               <button
-                 type="button"
-                 onClick={() => setPaymentMethodSelected('upi')}
-                 className={`py-2 px-3 rounded-xl font-black text-xs uppercase tracking-wider border transition-all cursor-pointer flex items-center justify-center space-x-1 ${
-                   paymentMethodSelected === 'upi'
-                     ? 'bg-cafe-caramel text-white border-cafe-caramel shadow-sm'
-                     : 'bg-white text-cafe-caramel border-cafe-cream hover:bg-cafe-cream/20'
-                 }`}
-               >
-                 <span>📱 UPI</span>
-               </button>
-             </div>
-           </div>
-
            <div className="flex justify-between text-cafe-espresso font-black text-xl pt-2">
              <span>TOTAL</span>
              <span>{formatCurrency(total)}</span>
